@@ -33,44 +33,53 @@ class UserOut(BaseModel):
 
 from app.services.seed_service import seed_data
 
+import traceback
+
 @router.post("/login", response_model=TokenOut)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """Email va parol bilan tizimga kirish (Async Beanie)."""
-    user = await User.find_one(User.email == form_data.username)
-    
-    # Auto-seed fallback if DB is uninitialized or missing demo user
-    if not user:
-        try:
-            await seed_data()
-            user = await User.find_one(User.email == form_data.username)
-        except Exception as seed_err:
-            print(f"Seed error on login fallback: {seed_err}")
+    try:
+        user = await User.find_one(User.email == form_data.username)
+        
+        # Auto-seed fallback if DB is uninitialized or missing demo user
+        if not user:
+            try:
+                await seed_data()
+                user = await User.find_one(User.email == form_data.username)
+            except Exception as seed_err:
+                print(f"Seed error on login fallback: {seed_err}")
 
-    if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email yoki parol noto'g'ri",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Hisob faolsizlashtirilgan")
+        if not user or not verify_password(form_data.password, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Email yoki parol noto'g'ri",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="Hisob faolsizlashtirilgan")
 
-    user.last_login = datetime.utcnow()
-    await user.save()
+        user.last_login = datetime.utcnow()
+        await user.save()
 
-    token = create_access_token({"sub": user.email, "role": user.role})
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": {
-            "id": str(user.id),
-            "full_name": user.full_name,
-            "email": user.email,
-            "role": user.role,
-            "role_label": ROLE_LABELS.get(user.role, user.role),
-            "bank_name": user.bank_name,
+        token = create_access_token({"sub": user.email, "role": user.role})
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "user": {
+                "id": str(user.id),
+                "full_name": user.full_name,
+                "email": user.email,
+                "role": user.role,
+                "role_label": ROLE_LABELS.get(user.role, user.role),
+                "bank_name": user.bank_name,
+            }
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as err:
+        print("LOGIN ERROR TRACEBACK:")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Login Error: {str(err)}")
 
 
 @router.get("/me", response_model=UserOut)
