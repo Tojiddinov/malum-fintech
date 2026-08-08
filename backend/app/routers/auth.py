@@ -31,10 +31,21 @@ class UserOut(BaseModel):
     last_login: Optional[datetime]
 
 
+from app.services.seed_service import seed_data
+
 @router.post("/login", response_model=TokenOut)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """Email va parol bilan tizimga kirish (Async Beanie)."""
     user = await User.find_one(User.email == form_data.username)
+    
+    # Auto-seed fallback if DB is uninitialized or missing demo user
+    if not user:
+        try:
+            await seed_data()
+            user = await User.find_one(User.email == form_data.username)
+        except Exception as seed_err:
+            print(f"Seed error on login fallback: {seed_err}")
+
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

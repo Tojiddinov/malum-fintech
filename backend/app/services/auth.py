@@ -34,7 +34,12 @@ ROLE_LABELS = {
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pbkdf2_sha256.verify(plain, hashed)
+    if not hashed:
+        return False
+    try:
+        return pbkdf2_sha256.verify(plain, hashed)
+    except Exception:
+        return False
 
 
 def hash_password(plain: str) -> str:
