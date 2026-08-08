@@ -9,34 +9,55 @@ from app.services.aml_kyc import run_aml_kyc_check
 
 
 async def seed_data():
-    """Seeds demo users and demo transactions if collections are empty."""
-    # 1. Seed Users
-    if await User.count() == 0:
-        seed_users = [
-            {
-                "full_name": "Farrukh Muminov (Admin)",
-                "email": "admin@amanat.uz",
-                "password": "admin123",
-                "role": "admin",
-                "bank_name": "Amanat Markaziy Banki",
-            },
-            {
-                "full_name": "Dr. Hamidulla Nazarov (Kengash Raisi)",
-                "email": "kengash@amanat.uz",
-                "password": "kengash123",
-                "role": "shariat_board",
-                "bank_name": "O'zbekiston Islom Banki Shariat Kengashi",
-            },
-            {
-                "full_name": "Azizbek Karimov (Auditor)",
-                "email": "auditor@amanat.uz",
-                "password": "auditor123",
-                "role": "auditor",
-                "bank_name": "O'zbekiston Milliy Auditi",
-            },
-        ]
+    """Seeds demo users and demo transactions."""
+    seed_users = [
+        {
+            "full_name": "Farrukh Muminov (Admin)",
+            "email": "admin@amanat.uz",
+            "password": "admin123",
+            "role": "admin",
+            "bank_name": "Malum Markaziy Banki",
+        },
+        {
+            "full_name": "Farrukh Muminov (Admin)",
+            "email": "admin@malum.uz",
+            "password": "admin123",
+            "role": "admin",
+            "bank_name": "Malum Markaziy Banki",
+        },
+        {
+            "full_name": "Dr. Hamidulla Nazarov (Kengash Raisi)",
+            "email": "kengash@amanat.uz",
+            "password": "kengash123",
+            "role": "shariat_board",
+            "bank_name": "O'zbekiston Islom Banki Shariat Kengashi",
+        },
+        {
+            "full_name": "Dr. Hamidulla Nazarov (Kengash Raisi)",
+            "email": "kengash@malum.uz",
+            "password": "kengash123",
+            "role": "shariat_board",
+            "bank_name": "O'zbekiston Islom Banki Shariat Kengashi",
+        },
+        {
+            "full_name": "Azizbek Karimov (Auditor)",
+            "email": "auditor@amanat.uz",
+            "password": "auditor123",
+            "role": "auditor",
+            "bank_name": "O'zbekiston Milliy Auditi",
+        },
+        {
+            "full_name": "Azizbek Karimov (Auditor)",
+            "email": "auditor@malum.uz",
+            "password": "auditor123",
+            "role": "auditor",
+            "bank_name": "O'zbekiston Milliy Auditi",
+        },
+    ]
 
-        for u in seed_users:
+    for u in seed_users:
+        existing = await User.find_one(User.email == u["email"])
+        if not existing:
             user = User(
                 full_name=u["full_name"],
                 email=u["email"],
@@ -46,7 +67,13 @@ async def seed_data():
                 is_active=True,
             )
             await user.insert()
-        print("✅ MongoDB Seed users created.")
+        else:
+            # Always ensure working password hash
+            existing.password_hash = hash_password(u["password"])
+            existing.is_active = True
+            await existing.save()
+            
+    print("✅ MongoDB Seed users created/updated.")
 
     # 2. Seed Transactions & Audit Logs
     if await Transaction.count() == 0:
