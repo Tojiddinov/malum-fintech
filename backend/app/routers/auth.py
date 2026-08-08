@@ -34,10 +34,16 @@ class UserOut(BaseModel):
 from app.services.seed_service import seed_data
 
 import traceback
+import app.state as app_state
 
 @router.post("/login", response_model=TokenOut)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """Email va parol bilan tizimga kirish (Async Beanie)."""
+    if not app_state.db_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Ma'lumotlar bazasi ulanmagan. Render environment variables va MongoDB Atlas IP whitelist tekshiring."
+        )
     try:
         user = await User.find_one({"email": form_data.username})
         
