@@ -1,0 +1,23 @@
+# Dependencies & Environments
+**/node_modules/
+**/venv/
+**/env/
+**/.venv/
+__pycache__/
+*.py[cod]
+
+# Build outputs
+**/dist/
+**/build/
+**/generated_reports/
+
+# Environment variables & secrets
+.env
+*.env
+!.env.example
+
+# OS & Editor files
+.DS_Store
+.vscode/
+.idea/
+*.log
