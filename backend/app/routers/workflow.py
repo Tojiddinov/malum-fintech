@@ -32,9 +32,9 @@ async def get_workflow_queue(
             "rejected": ["rejected", "rad_etilgan"],
         }
         allowed = status_map.get(status, [status])
-        q = q.find(Transaction.status.in_(allowed))
+        q = Transaction.find_all().find({"status": {"$in": allowed}})
     else:
-        q = q.find(Transaction.status.in_(["pending", "reviewing", "kutilmoqda", "korib_chiqilmoqda"]))
+        q = Transaction.find_all().find({"status": {"$in": ["pending", "reviewing", "kutilmoqda", "korib_chiqilmoqda"]}})
 
     txs = await q.sort("+created_at").to_list()
     res = []
@@ -117,16 +117,16 @@ async def reject_workflow(
 @router.get("/stats")
 async def get_workflow_stats(current_user: User = Depends(get_current_user)):
     """Workflow statistikasi (Async Motor/Beanie)."""
-    pending = await Transaction.find(Transaction.status.in_(["pending", "kutilmoqda"])).count()
-    reviewing = await Transaction.find(Transaction.status.in_(["reviewing", "korib_chiqilmoqda"])).count()
-    approved = await Transaction.find(Transaction.status.in_(["approved", "tasdiqlangan"])).count()
-    rejected = await Transaction.find(Transaction.status.in_(["rejected", "rad_etilgan"])).count()
+    pending = await Transaction.find_all().find({"status": {"$in": ["pending", "kutilmoqda"]}}).count()
+    reviewing = await Transaction.find_all().find({"status": {"$in": ["reviewing", "korib_chiqilmoqda"]}}).count()
+    approved = await Transaction.find_all().find({"status": {"$in": ["approved", "tasdiqlangan"]}}).count()
+    rejected = await Transaction.find_all().find({"status": {"$in": ["rejected", "rad_etilgan"]}}).count()
 
     threshold = datetime.utcnow() - timedelta(hours=48)
-    overdue = await Transaction.find(
-        Transaction.status.in_(["pending", "reviewing", "kutilmoqda", "korib_chiqilmoqda"]),
-        Transaction.created_at <= threshold
-    ).count()
+    overdue = await Transaction.find_all().find({
+        "status": {"$in": ["pending", "reviewing", "kutilmoqda", "korib_chiqilmoqda"]},
+        "created_at": {"$lte": threshold}
+    }).count()
 
     return {
         "pending": pending,

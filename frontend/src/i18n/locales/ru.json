@@ -76,6 +76,8 @@
     "approvedPct": "{{pct}}% успешно",
     "reviewing": "На рассмотрении",
     "approvedVolume": "Одобренный объём",
+    "refresh": "Обновить",
+    "refreshing": "Обновляется...",
     "recentTx": "Последние сделки",
     "noTx": "Сделок пока нет",
     "amlRisk": "AML/KYC Риск",

@@ -76,6 +76,8 @@
     "approvedPct": "{{pct}}% muvaffaqiyatli",
     "reviewing": "Ko'rib chiqilmoqda",
     "approvedVolume": "Tasdiqlangan hajm",
+    "refresh": "Yangilash",
+    "refreshing": "Yangilanmoqda...",
     "recentTx": "So'nggi bitimlar",
     "noTx": "Hozircha bitimlar yo'q",
     "amlRisk": "AML/KYC Risk",

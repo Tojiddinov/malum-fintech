@@ -32,51 +32,107 @@ function RecentRow({ tx }) {
   )
 }
 
-export default function Dashboard() {
-  const { t } = useTranslation()
-  const [stats, setStats] = useState(null)
-  const [recent, setRecent] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    Promise.all([
-      transactionsApi.stats(),
-      transactionsApi.list({ limit: 6 }),
-    ]).then(([s, r]) => {
-      setStats(s.data)
-      setRecent(r.data)
-    }).finally(() => setLoading(false))
-  }, [])
-
-  if (loading) return (
-    <div style={{ padding: 36 }}>
+function SectionSkeleton({ rows = 4 }) {
+  return (
+    <>
       <div className="skeleton" style={{ width: 200, height: 28, marginBottom: 32 }} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
         {[...Array(4)].map((_, i) => <div key={i} className="skeleton" style={{ height: 100, borderRadius: 14 }} />)}
       </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20 }}>
+        <div className="card" style={{ minHeight: 320, padding: 20 }}>
+          {[...Array(rows)].map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 28, marginBottom: 14, borderRadius: 12 }} />
+          ))}
+        </div>
+        <div className="card" style={{ minHeight: 320, padding: 20 }}>
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 18, marginBottom: 14, borderRadius: 999 }} />
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+export default function Dashboard() {
+  const { t } = useTranslation()
+  const [stats, setStats] = useState(null)
+  const [recent, setRecent] = useState([])
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [recentLoading, setRecentLoading] = useState(true)
+  const [statsError, setStatsError] = useState(null)
+  const [recentError, setRecentError] = useState(null)
+
+  const loadDashboard = () => {
+    setStatsLoading(true)
+    setRecentLoading(true)
+    setStatsError(null)
+    setRecentError(null)
+
+    transactionsApi.stats()
+      .then((res) => setStats(res.data))
+      .catch((err) => {
+        console.error('Dashboard stats error:', err)
+        setStatsError('Dashboard statistikasi yuklanmadi.')
+      })
+      .finally(() => setStatsLoading(false))
+
+    transactionsApi.list({ limit: 6 })
+      .then((res) => setRecent(res.data))
+      .catch((err) => {
+        console.error('Dashboard recent transactions error:', err)
+        setRecentError('Yaqinda qo‘shilgan bitimlar yuklanmadi.')
+      })
+      .finally(() => setRecentLoading(false))
+  }
+
+  useEffect(() => {
+    loadDashboard()
+  }, [])
+
+  if (statsLoading && recentLoading) return (
+    <div style={{ padding: 36 }}>
+      <SectionSkeleton />
     </div>
   )
 
-  const approvedPct = stats.total ? Math.round((stats.by_status.approved / stats.total) * 100) : 0
+  const approvedPct = stats?.total ? Math.round((stats.by_status.approved / stats.total) * 100) : 0
 
   return (
     <div className="animate-fade-in" style={{ padding: 36, maxWidth: 1200 }}>
-      {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>{t('dashboard.title')}</h1>
-        <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>{t('dashboard.subtitle')}</p>
+      <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>{t('dashboard.title')}</h1>
+          <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>{t('dashboard.subtitle')}</p>
+        </div>
+        <button
+          onClick={loadDashboard}
+          style={{ padding: '10px 16px', borderRadius: 999, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 700 }}
+          disabled={statsLoading || recentLoading}
+        >
+          {statsLoading || recentLoading ? t('dashboard.refreshing') || 'Yangilanmoqda...' : t('dashboard.refresh') || 'Yangilash'}
+        </button>
       </div>
 
-      {/* Stats grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
-        <StatCard label={t('dashboard.totalTx')} value={stats.total} icon="📊" color="var(--text-primary)" />
-        <StatCard label={t('dashboard.approved')} value={stats.by_status.approved} sub={t('dashboard.approvedPct', { pct: approvedPct })} icon="✅" color="#68D391" />
-        <StatCard label={t('dashboard.reviewing')} value={stats.by_status.reviewing} icon="⏳" color="#90CDF4" />
-        <StatCard label={t('dashboard.approvedVolume')} value={formatAmount(stats.approved_volume_uzs)} icon="💰" color="var(--gold-primary)" />
+        {statsLoading ? (
+          [...Array(4)].map((_, i) => <div key={i} className="skeleton" style={{ height: 100, borderRadius: 14 }} />)
+        ) : statsError ? (
+          <div className="card" style={{ padding: 20, gridColumn: 'span 4' }}>
+            <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{statsError}</div>
+          </div>
+        ) : (
+          <>
+            <StatCard label={t('dashboard.totalTx')} value={stats.total} icon="📊" color="var(--text-primary)" />
+            <StatCard label={t('dashboard.approved')} value={stats.by_status.approved} sub={t('dashboard.approvedPct', { pct: approvedPct })} icon="✅" color="#68D391" />
+            <StatCard label={t('dashboard.reviewing')} value={stats.by_status.reviewing} icon="⏳" color="#90CDF4" />
+            <StatCard label={t('dashboard.approvedVolume')} value={formatAmount(stats.approved_volume_uzs)} icon="💰" color="var(--gold-primary)" />
+          </>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20 }}>
-        {/* Recent transactions */}
         <div className="card" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{t('dashboard.recentTx')}</h2>
@@ -91,43 +147,68 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {recent.length === 0
-                ? <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{t('dashboard.noTx')}</td></tr>
-                : recent.map(tx => <RecentRow key={tx.id} tx={tx} />)}
+              {recentLoading ? (
+                [...Array(4)].map((_, i) => (
+                  <tr key={i}>
+                    <td colSpan={6} style={{ padding: 18 }}>
+                      <div className="skeleton" style={{ width: '100%', height: 20, borderRadius: 10 }} />
+                    </td>
+                  </tr>
+                ))
+              ) : recentError ? (
+                <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>{recentError}</td></tr>
+              ) : recent.length === 0 ? (
+                <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{t('dashboard.noTx')}</td></tr>
+              ) : (
+                recent.map(tx => <RecentRow key={tx.id} tx={tx} />)
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* Risk breakdown */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="card" style={{ padding: 20 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('dashboard.amlRisk')}</h3>
-            {[
-              { label: t('dashboard.lowRisk'), value: stats.by_risk.low, color: '#68D391', pct: stats.total ? (stats.by_risk.low/stats.total)*100 : 0 },
-              { label: t('dashboard.mediumRisk'), value: stats.by_risk.medium, color: '#F6AD55', pct: stats.total ? (stats.by_risk.medium/stats.total)*100 : 0 },
-              { label: t('dashboard.highRisk'), value: stats.by_risk.high, color: '#FC8181', pct: stats.total ? (stats.by_risk.high/stats.total)*100 : 0 },
-            ].map(r => (
-              <div key={r.label} style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{r.label}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: r.color }}>{r.value}</span>
-                </div>
-                <div style={{ height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.05)' }}>
-                  <div style={{ height: '100%', borderRadius: 999, width: `${r.pct}%`, background: r.color, transition: 'width 0.6s ease' }} />
-                </div>
+          {statsLoading ? (
+            <div className="card" style={{ padding: 20 }}>
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="skeleton" style={{ height: 18, marginBottom: 14, borderRadius: 999 }} />
+              ))}
+            </div>
+          ) : statsError ? (
+            <div className="card" style={{ padding: 20 }}>
+              <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{statsError}</div>
+            </div>
+          ) : (
+            <>
+              <div className="card" style={{ padding: 20 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('dashboard.amlRisk')}</h3>
+                {[
+                  { label: t('dashboard.lowRisk'), value: stats.by_risk.low, color: '#68D391', pct: stats.total ? (stats.by_risk.low/stats.total)*100 : 0 },
+                  { label: t('dashboard.mediumRisk'), value: stats.by_risk.medium, color: '#F6AD55', pct: stats.total ? (stats.by_risk.medium/stats.total)*100 : 0 },
+                  { label: t('dashboard.highRisk'), value: stats.by_risk.high, color: '#FC8181', pct: stats.total ? (stats.by_risk.high/stats.total)*100 : 0 },
+                ].map(r => (
+                  <div key={r.label} style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{r.label}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: r.color }}>{r.value}</span>
+                    </div>
+                    <div style={{ height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.05)' }}>
+                      <div style={{ height: '100%', borderRadius: 999, width: `${r.pct}%`, background: r.color, transition: 'width 0.6s ease' }} />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          <div className="card" style={{ padding: 20 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('dashboard.byStatus')}</h3>
-            {Object.entries(stats.by_status).map(([key, val]) => (
-              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <StatusBadge status={key} />
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{val}</span>
+              <div className="card" style={{ padding: 20 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('dashboard.byStatus')}</h3>
+                {Object.entries(stats.by_status).map(([key, val]) => (
+                  <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <StatusBadge status={key} />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{val}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>

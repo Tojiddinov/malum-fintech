@@ -76,6 +76,8 @@
     "approvedPct": "{{pct}}% successful",
     "reviewing": "Under review",
     "approvedVolume": "Approved volume",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing...",
     "recentTx": "Recent transactions",
     "noTx": "No transactions yet",
     "amlRisk": "AML/KYC Risk",

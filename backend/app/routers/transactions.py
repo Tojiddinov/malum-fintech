@@ -278,16 +278,16 @@ async def get_audit_log(tx_id: str, current_user: User = Depends(get_current_use
 async def get_stats(current_user: User = Depends(get_current_user)):
     """Dashboard uchun asosiy statistika."""
     total = await Transaction.count()
-    pending = await Transaction.find(Transaction.status.in_(["pending", "kutilmoqda"])).count()
-    reviewing = await Transaction.find(Transaction.status.in_(["reviewing", "korib_chiqilmoqda"])).count()
-    approved = await Transaction.find(Transaction.status.in_(["approved", "tasdiqlangan"])).count()
-    rejected = await Transaction.find(Transaction.status.in_(["rejected", "rad_etilgan"])).count()
+    pending = await Transaction.find_all().find({"status": {"$in": ["pending", "kutilmoqda"]}}).count()
+    reviewing = await Transaction.find_all().find({"status": {"$in": ["reviewing", "korib_chiqilmoqda"]}}).count()
+    approved = await Transaction.find_all().find({"status": {"$in": ["approved", "tasdiqlangan"]}}).count()
+    rejected = await Transaction.find_all().find({"status": {"$in": ["rejected", "rad_etilgan"]}}).count()
 
-    high_risk = await Transaction.find(Transaction.risk_score.in_(["high", "yuqori"])).count()
-    medium_risk = await Transaction.find(Transaction.risk_score.in_(["medium", "orta"])).count()
-    low_risk = await Transaction.find(Transaction.risk_score.in_(["low", "past"])).count()
+    high_risk = await Transaction.find_all().find({"risk_score": {"$in": ["high", "yuqori"]}}).count()
+    medium_risk = await Transaction.find_all().find({"risk_score": {"$in": ["medium", "orta"]}}).count()
+    low_risk = await Transaction.find_all().find({"risk_score": {"$in": ["low", "past"]}}).count()
 
-    approved_txs = await Transaction.find(Transaction.status.in_(["approved", "tasdiqlangan"])).to_list()
+    approved_txs = await Transaction.find_all().find({"status": {"$in": ["approved", "tasdiqlangan"]}}).to_list()
     approved_volume = sum(t.amount for t in approved_txs)
 
     return {

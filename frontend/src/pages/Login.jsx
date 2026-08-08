@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { authApi } from '../api/client'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 
 export default function Login({ onLoginSuccess }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -19,6 +21,7 @@ export default function Login({ onLoginSuccess }) {
       localStorage.setItem('malum_token', data.access_token)
       localStorage.setItem('malum_user', JSON.stringify(data.user))
       onLoginSuccess(data.user)
+      navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(err.response?.data?.detail || t('auth.loginError'))
     } finally {
@@ -26,9 +29,22 @@ export default function Login({ onLoginSuccess }) {
     }
   }
 
-  const fillDemoUser = (demoEmail, demoPass) => {
+  const fillDemoUserAndLogin = async (demoEmail, demoPass) => {
     setEmail(demoEmail)
     setPassword(demoPass)
+    setError(null)
+    setLoading(true)
+    try {
+      const { data } = await authApi.login(demoEmail, demoPass)
+      localStorage.setItem('malum_token', data.access_token)
+      localStorage.setItem('malum_user', JSON.stringify(data.user))
+      onLoginSuccess(data.user)
+      navigate('/dashboard', { replace: true })
+    } catch (err) {
+      setError(err.response?.data?.detail || err.message || t('auth.loginError'))
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -142,7 +158,7 @@ export default function Login({ onLoginSuccess }) {
               <button
                 key={u.email}
                 type="button"
-                onClick={() => fillDemoUser(u.email, u.pass)}
+                onClick={() => fillDemoUserAndLogin(u.email, u.pass)}
                 style={{
                   display: 'flex',
                   justifyContent: 'space-between',
