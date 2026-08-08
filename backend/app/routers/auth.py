@@ -39,13 +39,13 @@ import traceback
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """Email va parol bilan tizimga kirish (Async Beanie)."""
     try:
-        user = await User.find_one(User.email == form_data.username)
+        user = await User.find_one({"email": form_data.username})
         
         # Auto-seed fallback if DB is uninitialized or missing demo user
         if not user:
             try:
                 await seed_data()
-                user = await User.find_one(User.email == form_data.username)
+                user = await User.find_one({"email": form_data.username})
             except Exception as seed_err:
                 print(f"Seed error on login fallback: {seed_err}")
 
@@ -77,9 +77,11 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     except HTTPException:
         raise
     except Exception as err:
+        print(f"LOGIN ERROR TYPE: {type(err).__name__}")
+        print(f"LOGIN ERROR MSG: {err}")
         print("LOGIN ERROR TRACEBACK:")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Login Error: {str(err)}")
+        raise HTTPException(status_code=500, detail=f"Login Error [{type(err).__name__}]: {str(err)}")
 
 
 @router.get("/me", response_model=UserOut)

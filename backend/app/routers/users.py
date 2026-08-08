@@ -37,7 +37,7 @@ async def list_users(current_user: User = Depends(require_admin)):
 @router.post("/", response_model=UserOut, status_code=201)
 async def create_user(payload: UserCreate, current_user: User = Depends(require_admin)):
     """Yangi foydalanuvchi yaratish (faqat admin)."""
-    existing = await User.find_one(User.email == payload.email)
+    existing = await User.find_one({"email": payload.email})
     if existing:
         raise HTTPException(status_code=400, detail="Ushbu email bilan foydalanuvchi mavjud")
 
@@ -64,7 +64,7 @@ async def update_user(user_id: str, payload: UserUpdate, current_user: User = De
         raise HTTPException(status_code=404, detail="Foydalanuvchi topilmadi")
 
     if payload.email and payload.email != user.email:
-        dup = await User.find_one(User.email == payload.email)
+        dup = await User.find_one({"email": payload.email})
         if dup:
             raise HTTPException(status_code=400, detail="Ushbu email band")
         user.email = payload.email

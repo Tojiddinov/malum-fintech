@@ -56,7 +56,7 @@ async def seed_data():
     ]
 
     for u in seed_users:
-        existing = await User.find_one(User.email == u["email"])
+        existing = await User.find_one({"email": u["email"]})
         if not existing:
             user = User(
                 full_name=u["full_name"],

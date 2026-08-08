@@ -69,7 +69,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     email: str = payload.get("sub")
     if not email:
         raise HTTPException(status_code=401, detail="Token noto'g'ri")
-    user = await User.find_one(User.email == email)
+    user = await User.find_one({"email": email})
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Foydalanuvchi topilmadi yoki faol emas")
     return user
