@@ -55,7 +55,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Hisob faolsizlashtirilgan")
 
-    user.last_login = datetime.now(timezone.utc)
+    user.last_login = datetime.utcnow()
     await user.save()
 
     token = create_access_token({"sub": user.email, "role": user.role})
