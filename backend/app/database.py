@@ -13,5 +13,10 @@ async def get_motor_client():
     if "username:password" in url or not url.strip():
         # Fallback to local MongoDB if Atlas placeholder is unchanged
         url = "mongodb://localhost:27017"
-    client = AsyncIOMotorClient(url, serverSelectionTimeoutMS=3000)
+    client = AsyncIOMotorClient(
+        url,
+        serverSelectionTimeoutMS=30000,  # 30s — Render cold start uchun
+        connectTimeoutMS=20000,
+        socketTimeoutMS=30000,
+    )
     return client
