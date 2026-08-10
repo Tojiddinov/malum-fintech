@@ -1,6 +1,14 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+const PRODUCTION_API_URL = 'https://malum-fintech.onrender.com/api'
+
+// Local development uses Vite's /api proxy. In production, call Render
+// directly unless VITE_API_URL explicitly provides another backend.
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL || (import.meta.env.PROD ? PRODUCTION_API_URL : '/api')
+).replace(/\/+$/, '')
+
+const apiUrl = (path) => `${API_BASE_URL}/${path.replace(/^\/+/, '')}`
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -67,7 +75,7 @@ export const workflowApi = {
 export const reportsApi = {
   generate: (data) => api.post('/reports/generate', data),
   history: () => api.get('/reports/history'),
-  downloadUrl: (id) => `${API_BASE_URL}/reports/download/${id}`,
+  downloadUrl: (id) => apiUrl(`/reports/download/${id}`),
 }
 
 export const usersApi = {

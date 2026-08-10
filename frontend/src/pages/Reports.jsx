@@ -54,7 +54,7 @@ export default function Reports() {
       setMessage({ type: 'success', text: `✅ Hisobot yaratildi: ${data.filename}` })
 
       // Auto trigger browser download
-      window.open(data.download_url, '_blank')
+      window.open(reportsApi.downloadUrl(data.id), '_blank', 'noopener,noreferrer')
       loadHistory()
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.detail || "Hisobot yaratishda xato" })
@@ -305,7 +305,7 @@ export default function Reports() {
                     </td>
                     <td style={{ padding: '12px' }}>
                       <a
-                        href={item.download_url}
+                        href={reportsApi.downloadUrl(item.id)}
                         target="_blank"
                         rel="noreferrer"
                         className="btn btn-ghost"
