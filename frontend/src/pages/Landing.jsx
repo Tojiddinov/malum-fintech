@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { demoRequestsApi } from '../api/client'
 import { getApiError } from '../utils/apiError'
+import BrandLogo from '../components/BrandLogo'
 
 export default function Landing() {
   const { t } = useTranslation()
@@ -68,9 +69,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           {/* Brand */}
           <Link to="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#C9A227] to-[#A07818] flex items-center justify-center text-[#0F2D21] font-black text-xl shadow-md">
-              M
-            </div>
+            <BrandLogo width={58} framed />
             <div>
               <span className="text-xl font-extrabold text-white tracking-tight block leading-tight">MIZAN</span>
               <span className="text-[10px] text-[#C9A227] font-bold tracking-widest uppercase block">

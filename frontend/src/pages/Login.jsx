@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { authApi } from '../api/client'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import BrandLogo from '../components/BrandLogo'
 
 const getLoginError = (err, fallback) => {
   if (!err.response) {
@@ -85,16 +86,7 @@ export default function Login({ onLoginSuccess }) {
       }}>
         {/* Header Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{
-            width: 56, height: 56, margin: '0 auto 16px',
-            background: 'linear-gradient(135deg, var(--gold-primary), var(--gold-dark))',
-            borderRadius: 14,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 28, fontWeight: 800, color: '#0F2D21',
-            boxShadow: '0 6px 20px rgba(201,162,39,0.35)',
-          }}>
-            M
-          </div>
+          <BrandLogo width={132} framed style={{ margin: '0 auto 16px' }} />
           <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
             MIZAN
           </h1>

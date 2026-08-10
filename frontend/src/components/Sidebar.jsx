@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from './LanguageSwitcher'
+import BrandLogo from './BrandLogo'
 
 export default function Sidebar({ user, onLogout }) {
   const { t } = useTranslation()
@@ -99,14 +100,7 @@ export default function Sidebar({ user, onLogout }) {
       {/* Brand Header */}
       <div style={{ padding: '24px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
         <NavLink to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 40, height: 40,
-            background: 'linear-gradient(135deg, var(--gold-primary), var(--gold-dark))',
-            borderRadius: 10,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 20, fontWeight: 800, color: '#0F2D21',
-            boxShadow: '0 4px 14px rgba(201,162,39,0.3)',
-          }}>M</div>
+          <BrandLogo width={58} framed />
           <div>
             <div style={{ fontWeight: 800, fontSize: 18, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>MIZAN</div>
             <div style={{ fontSize: 10, color: 'var(--gold-primary)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{t('brand.tagline')}</div>

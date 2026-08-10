@@ -10,6 +10,7 @@ import Workflow from './pages/Workflow'
 import Reports from './pages/Reports'
 import UsersManagement from './pages/UsersManagement'
 import { authApi } from './api/client'
+import BrandLogo from './components/BrandLogo'
 import './index.css'
 
 // Helper component to handle Login redirect to /dashboard
@@ -88,12 +89,7 @@ export default function App() {
         background: 'var(--surface-dark)', color: 'var(--gold-primary)', fontSize: 16, fontWeight: 600
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <div className="animate-pulse-gold" style={{
-            width: 48, height: 48, borderRadius: 12, background: 'var(--gold-primary)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F2D21', fontSize: 24, fontWeight: 800
-          }}>
-            M
-          </div>
+          <BrandLogo width={92} framed className="animate-pulse-gold" />
           Yuklanmoqda...
         </div>
       </div>
