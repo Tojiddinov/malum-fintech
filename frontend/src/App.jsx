@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
@@ -21,9 +21,12 @@ function LoginRoute({ user, onLoginSuccess }) {
 }
 
 // Protected layout wrapper
-function ProtectedLayout({ user, onLogout, children }) {
+function ProtectedLayout({ user, onLogout, allowedRoles, children }) {
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />
   }
 
   return (
@@ -39,7 +42,13 @@ function ProtectedLayout({ user, onLogout, children }) {
 export default function App() {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('malum_user')
-    return saved ? JSON.parse(saved) : null
+    if (!saved) return null
+    try {
+      return JSON.parse(saved)
+    } catch {
+      localStorage.removeItem('malum_user')
+      return null
+    }
   })
   const [checkingAuth, setCheckingAuth] = useState(true)
 
@@ -119,7 +128,7 @@ export default function App() {
           path="/transactions"
           element={
             <ProtectedLayout user={user} onLogout={handleLogout}>
-              <Transactions />
+              <Transactions currentUser={user} />
             </ProtectedLayout>
           }
         />
@@ -128,7 +137,7 @@ export default function App() {
           path="/transactions/:id"
           element={
             <ProtectedLayout user={user} onLogout={handleLogout}>
-              <TransactionDetail />
+              <TransactionDetail currentUser={user} />
             </ProtectedLayout>
           }
         />
@@ -136,7 +145,7 @@ export default function App() {
         <Route
           path="/workflow"
           element={
-            <ProtectedLayout user={user} onLogout={handleLogout}>
+            <ProtectedLayout user={user} onLogout={handleLogout} allowedRoles={['admin', 'shariat_board']}>
               <Workflow currentUser={user} />
             </ProtectedLayout>
           }
@@ -145,7 +154,7 @@ export default function App() {
         <Route
           path="/reports"
           element={
-            <ProtectedLayout user={user} onLogout={handleLogout}>
+            <ProtectedLayout user={user} onLogout={handleLogout} allowedRoles={['admin', 'auditor']}>
               <Reports />
             </ProtectedLayout>
           }
@@ -154,7 +163,7 @@ export default function App() {
         <Route
           path="/users"
           element={
-            <ProtectedLayout user={user} onLogout={handleLogout}>
+            <ProtectedLayout user={user} onLogout={handleLogout} allowedRoles={['admin']}>
               <UsersManagement currentUser={user} />
             </ProtectedLayout>
           }

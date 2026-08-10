@@ -1,6 +1,6 @@
 {
   "brand": {
-    "name": "Malum",
+    "name": "MIZAN",
     "tagline": "Исламский Банк",
     "description": "Финтех платформа для исламских банков Узбекистана",
     "slogan": "Платформа исламских финансов"
@@ -57,7 +57,7 @@
   "auth": {
     "loginTitle": "Вход в систему",
     "email": "Электронная почта",
-    "emailPlaceholder": "например: admin@malum.uz",
+    "emailPlaceholder": "например: admin@mizan.uz",
     "password": "Пароль",
     "passwordPlaceholder": "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
     "loginButton": "Войти \u2192",
@@ -201,7 +201,7 @@
     "contactBank": "Название банка",
     "contactMessage": "Сообщение (необязательно)",
     "contactSend": "Отправить сообщение \u2192",
-    "footerRights": "\u00a9 {{year}} Malum. Все права защищены.",
+    "footerRights": "\u00a9 {{year}} MIZAN. Все права защищены.",
     "footerTagline": "Для исламских банков Узбекистана"
   },
   "status": {

@@ -1,4 +1,4 @@
-# Amanat — Islom Banki Bitimlarini Boshqarish Platformasi
+# MIZAN — Islom Banki Bitimlarini Boshqarish Platformasi
 
 > B2B Fintech Platforma: O'zbekiston Islom banklari uchun Murabaha/Musharaka bitimlarini boshqarish, Shariat komplaens landing page, JWT Autentifikatsiya, Shariat kengashi workflow'i, Hisobotlar generatori (PDF/Excel), MongoDB Atlas (Motor/Beanie) hamda Rol va Foydalanuvchilar boshqaruvi.
 
@@ -20,7 +20,7 @@ amanat/
 │   ├── app/
 │   │   ├── main.py        # FastAPI app, CORS, Lifespan Beanie init
 │   │   ├── database.py    # Async Motor client & Dotenv config
-│   │   ├── models/        # User, Transaction, AuditLog, Report Beanie Document modellari
+│   │   ├── models/        # User, Transaction, AuditLog, Report va lead modellari
 │   │   ├── schemas/       # Pydantic API sxemalari
 │   │   ├── routers/       # auth, transactions, workflow, reports, users routerlari
 │   │   └── services/      # auth (JWT/PBKDF2), aml_kyc mock, seed_service
@@ -41,7 +41,7 @@ amanat/
 | `/dashboard` | **Dashboard** | Himoyalangan (JWT Auth) |
 | `/transactions` | **Bitim Reestri** | Himoyalangan (JWT Auth) |
 | `/workflow` | **Shariat Workflow** | Himoyalangan (Admin / Shariat Kengashi) |
-| `/reports` | **Hisobotlar Generatori** | Himoyalangan (JWT Auth) |
+| `/reports` | **Hisobotlar Generatori** | Himoyalangan (Admin / Auditor) |
 | `/users` | **Foydalanuvchilar & Rollar** | Himoyalangan (Faqat Admin) |
 
 ---
@@ -68,12 +68,21 @@ python3 -m venv venv
 source venv/bin/activate     # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Serverni ishga tushirish (Beanie avtomatik seed qiladi)
+# Demo ma'lumotlarni bir marta yaratish (ixtiyoriy)
+python seed.py
+
+# Serverni ishga tushirish
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 - Backend API: **http://localhost:8000**  
 - Swagger API Hujjatlari: **http://localhost:8000/api/docs**
+
+`ENABLE_DEMO_SEED=true` bo'lsa, server ishga tushganda yetishmayotgan demo
+accountlar yaratiladi. Mavjud account parollari avtomatik almashtirilmaydi.
+
+Production uchun `ENVIRONMENT=production`, haqiqiy `MONGODB_URL`, kuchli
+`JWT_SECRET_KEY` va frontend domeni yozilgan `ALLOWED_ORIGINS` majburiy.
 
 ---
 
@@ -92,7 +101,7 @@ npm run dev
 
 ## ✨ Landing Page Tarkibi (`src/pages/Landing.jsx`)
 
-1. **Navbar**: Sticky navigation, "Amanat Islom Moliyasi" brending, hamburger menu (mobile), va `/login` ga o'tuvchi "Kirish" tugmasi.
+1. **Navbar**: Sticky navigation, "MIZAN Islom Moliyasi" brending, hamburger menu (mobile), va `/login` ga o'tuvchi "Kirish" tugmasi.
 2. **Hero Section**: 2-qatorli sarlavha, Islom bankchiligi dashboard illyustratsiyasi, "Platformaga kirish" (`/login`) va "Demo so'rash" (smooth scroll) tugmalari.
 3. **Statistika Band**: 4 ta karta (`10+` Tashkilot, `$2 mlrd+` Hajm, `99.2%` Komplaens, `29.06.2026` Qonun sanasi).
 4. **Xususiyatlar**: Bitim reestri, Shariat Workflow va AML/KYC nazorati kartalari.

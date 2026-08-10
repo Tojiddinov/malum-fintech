@@ -1,266 +1,410 @@
-import json
+"""Tenant-scoped, authenticated report generation and downloads."""
+
 import os
-from datetime import datetime
-from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
-from beanie import PydanticObjectId
-from pydantic import BaseModel
+from datetime import date, datetime, time
+from io import BytesIO
+from pathlib import Path
+from typing import Literal, Optional
+from uuid import uuid4
+from xml.sax.saxutils import escape
 
-from app.models.models import Transaction, Report, User
-from app.services.auth import get_current_user
-
-# ReportLab imports for PDF
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-
-# OpenPyXL imports for Excel
 import openpyxl
+from beanie import PydanticObjectId
+from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import FileResponse
 from openpyxl.styles import Font, PatternFill
+from pydantic import BaseModel, Field, model_validator
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import (
+    HRFlowable,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
+
+from app.models.models import Report, Transaction, User
+from app.services.auth import require_report_access
+
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
-REPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "generated_reports")
-os.makedirs(REPORTS_DIR, exist_ok=True)
+ReportType = Literal["transaction_summary", "aml_risk_report", "shariat_audit"]
+ExportFormat = Literal["pdf", "excel"]
+TransactionType = Literal["Murabaha", "Musharaka"]
+TransactionStatus = Literal["pending", "reviewing", "approved", "rejected"]
+
+PDF_CONTENT_TYPE = "application/pdf"
+EXCEL_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+MAX_REPORT_BYTES = 12 * 1024 * 1024
+MAX_REPORT_ROWS = 5000
 
 
 class ReportGenerateRequest(BaseModel):
-    report_type: str  # transaction_summary | aml_risk_report | shariat_audit
-    export_format: str  # pdf | excel
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    transaction_type: Optional[str] = None
-    status: Optional[str] = None
-    min_amount: Optional[float] = None
+    report_type: ReportType
+    export_format: ExportFormat
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    transaction_type: Optional[TransactionType] = None
+    status: Optional[TransactionStatus] = None
+    min_amount: Optional[float] = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_date_range(self):
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("Boshlanish sanasi tugash sanasidan keyin bo'lishi mumkin emas")
+        return self
 
 
-async def filter_transactions(req: ReportGenerateRequest) -> List[Transaction]:
-    q = Transaction.find_all()
+async def filter_transactions(
+    req: ReportGenerateRequest,
+    tenant_id: str,
+) -> list[Transaction]:
+    filters: dict = {"tenant_id": tenant_id}
     if req.transaction_type:
-        q = q.find(Transaction.type == req.transaction_type)
+        filters["type"] = req.transaction_type
     if req.status:
-        q = q.find(Transaction.status == req.status)
-    if req.min_amount:
-        q = q.find(Transaction.amount >= req.min_amount)
-    if req.start_date:
-        try:
-            dt = datetime.strptime(req.start_date, "%Y-%m-%d")
-            q = q.find(Transaction.created_at >= dt)
-        except ValueError:
-            pass
-    if req.end_date:
-        try:
-            dt = datetime.strptime(req.end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
-            q = q.find(Transaction.created_at <= dt)
-        except ValueError:
-            pass
-    return await q.sort("-created_at").to_list()
+        filters["status"] = req.status
+    if req.min_amount is not None:
+        filters["amount"] = {"$gte": req.min_amount}
+    if req.start_date or req.end_date:
+        created_at_filter: dict = {}
+        if req.start_date:
+            created_at_filter["$gte"] = datetime.combine(req.start_date, time.min)
+        if req.end_date:
+            created_at_filter["$lte"] = datetime.combine(req.end_date, time.max)
+        filters["created_at"] = created_at_filter
+
+    return await Transaction.find(filters).sort("-created_at").limit(MAX_REPORT_ROWS + 1).to_list()
 
 
-def generate_pdf_report(filename: str, req: ReportGenerateRequest, txs: List[Transaction], bank_name: str) -> str:
-    file_path = os.path.join(REPORTS_DIR, filename)
-    doc = SimpleDocTemplate(file_path, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+def _totals_by_currency(txs: list[Transaction]) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    for tx in txs:
+        totals[tx.currency] = totals.get(tx.currency, 0) + tx.amount
+    return totals
+
+
+def _excel_safe(value: Optional[str]) -> str:
+    """Prevent user-controlled cells from being interpreted as formulas."""
+    text = value or "—"
+    if text.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return f"'{text}"
+    return text
+
+
+def generate_pdf_report(
+    req: ReportGenerateRequest,
+    txs: list[Transaction],
+    bank_name: str,
+) -> bytes:
+    output = BytesIO()
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=A4,
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=30,
+        bottomMargin=30,
+    )
     story = []
     styles = getSampleStyleSheet()
-
     title_style = ParagraphStyle(
-        'DocTitle', parent=styles['Heading1'], fontSize=20, textColor=colors.HexColor('#1B4332'), spaceAfter=6
+        "DocTitle",
+        parent=styles["Heading1"],
+        fontSize=20,
+        textColor=colors.HexColor("#1B4332"),
+        spaceAfter=6,
     )
     subtitle_style = ParagraphStyle(
-        'DocSubtitle', parent=styles['Normal'], fontSize=11, textColor=colors.HexColor('#C9A227'), spaceAfter=15
+        "DocSubtitle",
+        parent=styles["Normal"],
+        fontSize=11,
+        textColor=colors.HexColor("#C9A227"),
+        spaceAfter=15,
     )
-
     report_titles = {
         "transaction_summary": "BITIMLAR XULOSASI HISOBOTI",
         "aml_risk_report": "AML / KYC RISK TAHLILI HISOBOTI",
         "shariat_audit": "SHARIAT KENGASHI AUDIT HISOBOTI",
     }
 
-    title_text = report_titles.get(req.report_type, "AMANAT PLATFORMA HISOBOTI")
-    story.append(Paragraph(f"<b>AMANAT</b> — {title_text}", title_style))
-    story.append(Paragraph(f"Tashkilot: {bank_name} | Yaratilgan vaqt: {datetime.now().strftime('%Y-%m-%d %H:%M')}", subtitle_style))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#C9A227'), spaceAfter=15))
-
-    total_count = len(txs)
-    total_amount = sum(t.amount for t in txs)
-    summary_data = [
-        ["Jami bitimlar soni:", f"{total_count} ta", "Umumiy summa:", f"{total_amount:,.0f} UZS"],
-    ]
-    sum_table = Table(summary_data, colWidths=[120, 100, 120, 150])
-    sum_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F4F6F4')),
-        ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#0F2D21')),
-        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-    ]))
-    story.append(sum_table)
-    story.append(Spacer(1, 15))
-
-    headers = ["ID", "Tur", "Miqdor", "Kontragent", "Holat", "Risk", "Sana"]
-    table_data = [headers]
-    for t in txs:
-        table_data.append([
-            t.transaction_id,
-            t.type,
-            f"{t.amount:,.0f} {t.currency}",
-            (t.counterparty or "—")[:20],
-            t.status.upper(),
-            (t.risk_score or "low").upper(),
-            t.created_at.strftime("%Y-%m-%d"),
-        ])
-
-    tx_table = Table(table_data, colWidths=[50, 65, 100, 120, 75, 55, 65])
-    tx_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1B4332')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#FFFFFF')),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,0), 9),
-        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E0E0E0')),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F9FAF9')]),
-        ('FONTSIZE', (0,1), (-1,-1), 8),
-        ('TOPPADDING', (0,0), (-1,-1), 5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
-    ]))
-    story.append(tx_table)
-    story.append(Spacer(1, 20))
-
-    footer_style = ParagraphStyle(
-        'DocFooter', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#6B7D67'), alignment=1
+    story.append(
+        Paragraph(
+            f"<b>MIZAN</b> — {report_titles[req.report_type]}",
+            title_style,
+        )
     )
-    story.append(Paragraph("Ushbu hisobot Amanat platformasi tomonidan avtomatik yaratilgan.", footer_style))
+    story.append(
+        Paragraph(
+            f"Tashkilot: {escape(bank_name)} | "
+            f"Yaratilgan vaqt: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            subtitle_style,
+        )
+    )
+    story.append(
+        HRFlowable(
+            width="100%",
+            thickness=1.5,
+            color=colors.HexColor("#C9A227"),
+            spaceAfter=15,
+        )
+    )
 
+    totals = _totals_by_currency(txs)
+    summary_data = [["Jami bitimlar soni", f"{len(txs)} ta"]]
+    summary_data.extend(
+        [f"Umumiy summa ({currency})", f"{amount:,.0f}"]
+        for currency, amount in sorted(totals.items())
+    )
+    summary_table = Table(summary_data, colWidths=[220, 220])
+    summary_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F4F6F4")),
+                ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#0F2D21")),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    story.extend([summary_table, Spacer(1, 15)])
+
+    table_data = [["ID", "Tur", "Miqdor", "Kontragent", "Holat", "Risk", "Sana"]]
+    for tx in txs:
+        table_data.append(
+            [
+                tx.transaction_id,
+                tx.type,
+                f"{tx.amount:,.0f} {tx.currency}",
+                (tx.counterparty or "—")[:20],
+                tx.status.upper(),
+                (tx.risk_score or "low").upper(),
+                tx.created_at.strftime("%Y-%m-%d"),
+            ]
+        )
+
+    tx_table = Table(table_data, colWidths=[50, 65, 100, 120, 75, 55, 65], repeatRows=1)
+    tx_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1B4332")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E0E0E0")),
+                (
+                    "ROWBACKGROUNDS",
+                    (0, 1),
+                    (-1, -1),
+                    [colors.white, colors.HexColor("#F9FAF9")],
+                ),
+                ("FONTSIZE", (0, 0), (-1, 0), 9),
+                ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    story.extend([tx_table, Spacer(1, 20)])
+    footer_style = ParagraphStyle(
+        "DocFooter",
+        parent=styles["Normal"],
+        fontSize=8,
+        textColor=colors.HexColor("#6B7D67"),
+        alignment=1,
+    )
+    story.append(
+        Paragraph(
+            "Ushbu hisobot MIZAN platformasi tomonidan avtomatik yaratilgan.",
+            footer_style,
+        )
+    )
     doc.build(story)
-    return file_path
+    return output.getvalue()
 
 
-def generate_excel_report(filename: str, req: ReportGenerateRequest, txs: List[Transaction], bank_name: str) -> str:
-    file_path = os.path.join(REPORTS_DIR, filename)
-    wb = openpyxl.Workbook()
-
-    ws1 = wb.active
-    ws1.title = "Xulosa statistika"
+def generate_excel_report(
+    req: ReportGenerateRequest,
+    txs: list[Transaction],
+    bank_name: str,
+) -> bytes:
+    del req  # The selected transactions already represent the request filters.
+    workbook = openpyxl.Workbook()
+    summary = workbook.active
+    summary.title = "Xulosa statistika"
 
     header_fill = PatternFill(start_color="1B4332", end_color="1B4332", fill_type="solid")
     header_font = Font(name="Calibri", size=12, bold=True, color="FFFFFF")
     title_font = Font(name="Calibri", size=14, bold=True, color="1B4332")
 
-    ws1["A1"] = "AMANAT PLATFORMA HISOBOTI"
-    ws1["A1"].font = title_font
-    ws1["A2"] = f"Tashkilot: {bank_name} | Yaratilgan: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-
-    ws1.append([])
-    ws1.append(["Ko'rsatkich", "Qiymat"])
-    for col in range(1, 3):
-        cell = ws1.cell(row=4, column=col)
-        cell.fill = header_fill
-        cell.font = header_font
-
-    ws1.append(["Jami bitimlar soni", len(txs)])
-    ws1.append(["Umumiy hajm (UZS)", sum(t.amount for t in txs if t.currency == 'UZS')])
-    ws1.append(["Tasdiqlangan bitimlar", sum(1 for t in txs if t.status in ('approved', 'tasdiqlangan'))])
-    ws1.append(["Rad etilgan bitimlar", sum(1 for t in txs if t.status in ('rejected', 'rad_etilgan'))])
-
-    ws2 = wb.create_sheet(title="To'liq bitimlar ro'yxati")
-    headers = ["ID", "Tur", "Miqdor", "Valyuta", "Mas'ul shaxs", "Kontragent", "Holat", "Risk score", "Yaratilgan sana"]
-    ws2.append(headers)
-
-    for col in range(1, len(headers) + 1):
-        cell = ws2.cell(row=1, column=col)
-        cell.fill = header_fill
-        cell.font = header_font
-
-    for t in txs:
-        ws2.append([
-            t.transaction_id, t.type, t.amount, t.currency,
-            t.responsible_person, t.counterparty or "—",
-            t.status, t.risk_score or "low",
-            t.created_at.strftime("%Y-%m-%d %H:%M")
-        ])
-
-    for ws in [ws1, ws2]:
-        for col in ws.columns:
-            max_len = max(len(str(cell.value or '')) for cell in col)
-            col_letter = openpyxl.utils.get_column_letter(col[0].column)
-            ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
-
-    wb.save(file_path)
-    return file_path
-
-
-@router.post("/generate")
-async def generate_report(
-    req: ReportGenerateRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """Hisobot yaratadi (Async Motor/Beanie)."""
-    txs = await filter_transactions(req)
-    timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    ext = "pdf" if req.export_format == "pdf" else "xlsx"
-    filename = f"report_{req.report_type}_{timestamp_str}.{ext}"
-
-    bank_name = current_user.bank_name or "O'zbekiston Islom Banki"
-    if req.export_format == "pdf":
-        file_path = generate_pdf_report(filename, req, txs, bank_name)
-    else:
-        file_path = generate_excel_report(filename, req, txs, bank_name)
-
-    rec = Report(
-        report_type=req.report_type,
-        format=req.export_format,
-        filters=req.model_dump(),
-        file_path=file_path,
-        created_by=current_user.full_name,
-        created_at=datetime.utcnow(),
+    summary["A1"] = "MIZAN PLATFORMA HISOBOTI"
+    summary["A1"].font = title_font
+    summary["A2"] = (
+        f"Tashkilot: {_excel_safe(bank_name)} | "
+        f"Yaratilgan: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     )
-    await rec.insert()
+    summary.append([])
+    summary.append(["Ko'rsatkich", "Qiymat"])
+    for column in range(1, 3):
+        cell = summary.cell(row=4, column=column)
+        cell.fill = header_fill
+        cell.font = header_font
 
+    summary.append(["Jami bitimlar soni", len(txs)])
+    for currency, amount in sorted(_totals_by_currency(txs).items()):
+        summary.append([f"Umumiy hajm ({currency})", amount])
+    summary.append(["Tasdiqlangan bitimlar", sum(tx.status == "approved" for tx in txs)])
+    summary.append(["Rad etilgan bitimlar", sum(tx.status == "rejected" for tx in txs)])
+
+    details = workbook.create_sheet(title="To'liq bitimlar ro'yxati")
+    headers = [
+        "ID",
+        "Tur",
+        "Miqdor",
+        "Valyuta",
+        "Mas'ul shaxs",
+        "Kontragent",
+        "Holat",
+        "Risk score",
+        "Yaratilgan sana",
+    ]
+    details.append(headers)
+    for column in range(1, len(headers) + 1):
+        cell = details.cell(row=1, column=column)
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for tx in txs:
+        details.append(
+            [
+                tx.transaction_id,
+                tx.type,
+                tx.amount,
+                tx.currency,
+                _excel_safe(tx.responsible_person),
+                _excel_safe(tx.counterparty),
+                tx.status,
+                tx.risk_score or "low",
+                tx.created_at.strftime("%Y-%m-%d %H:%M"),
+            ]
+        )
+
+    for worksheet in (summary, details):
+        worksheet.freeze_panes = "A2"
+        for column in worksheet.columns:
+            max_length = max(len(str(cell.value or "")) for cell in column)
+            column_letter = openpyxl.utils.get_column_letter(column[0].column)
+            worksheet.column_dimensions[column_letter].width = min(max(max_length + 3, 12), 60)
+
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def _serialize_report(report: Report) -> dict:
+    filename = report.filename
+    if not filename and report.file_path:
+        filename = Path(report.file_path).name
     return {
-        "id": str(rec.id),
-        "filename": filename,
-        "download_url": f"/api/reports/download/{str(rec.id)}",
-        "record": {
-            "id": str(rec.id),
-            "report_type": rec.report_type,
-            "export_format": rec.format,
-            "created_by": rec.created_by,
-            "created_at": rec.created_at,
-            "filename": filename,
-        }
+        "id": str(report.id),
+        "report_type": report.report_type,
+        "export_format": report.format,
+        "created_by": report.created_by,
+        "created_at": report.created_at,
+        "filename": filename or "report",
+        "download_url": f"/api/reports/download/{report.id}",
     }
 
 
+@router.post("/generate", status_code=201)
+async def generate_report(
+    req: ReportGenerateRequest,
+    current_user: User = Depends(require_report_access),
+):
+    txs = await filter_transactions(req, current_user.tenant_id)
+    if len(txs) > MAX_REPORT_ROWS:
+        raise HTTPException(
+            status_code=413,
+            detail="Hisobotda 5000 tadan ko'p bitim bor. Filtrlarni toraytiring.",
+        )
+    filename = (
+        f"report_{req.report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
+        f"{uuid4().hex[:8]}.{'pdf' if req.export_format == 'pdf' else 'xlsx'}"
+    )
+    bank_name = current_user.bank_name or "O'zbekiston Islom Banki"
+    if req.export_format == "pdf":
+        file_data = generate_pdf_report(req, txs, bank_name)
+        content_type = PDF_CONTENT_TYPE
+    else:
+        file_data = generate_excel_report(req, txs, bank_name)
+        content_type = EXCEL_CONTENT_TYPE
+
+    if len(file_data) > MAX_REPORT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="Hisobot juda katta. Filtrlarni toraytirib qayta urinib ko'ring.",
+        )
+
+    report = Report(
+        tenant_id=current_user.tenant_id,
+        report_type=req.report_type,
+        format=req.export_format,
+        filters=req.model_dump(mode="json", exclude_none=True),
+        filename=filename,
+        content_type=content_type,
+        file_data=file_data,
+        created_by=current_user.full_name,
+    )
+    await report.insert()
+    record = _serialize_report(report)
+    return {"id": str(report.id), "filename": filename, "record": record, **record}
+
+
 @router.get("/history")
-async def get_reports_history(current_user: User = Depends(get_current_user)):
-    """Avval yaratilgan hisobotlar ro'yxati."""
-    recs = await Report.find_all().sort("-created_at").limit(50).to_list()
-    return [
-        {
-            "id": str(r.id),
-            "report_type": r.report_type,
-            "export_format": r.format,
-            "created_by": r.created_by,
-            "created_at": r.created_at,
-            "filename": os.path.basename(r.file_path),
-            "download_url": f"/api/reports/download/{str(r.id)}",
-        }
-        for r in recs
-    ]
+async def get_reports_history(
+    current_user: User = Depends(require_report_access),
+):
+    reports = await Report.find(
+        Report.tenant_id == current_user.tenant_id
+    ).sort("-created_at").limit(50).to_list()
+    return [_serialize_report(report) for report in reports]
 
 
 @router.get("/download/{report_id}")
-async def download_report(report_id: str):
-    """Yaratilgan hisobot faylini yuklab olish."""
-    rec = None
-    if PydanticObjectId.is_valid(report_id):
-        rec = await Report.get(PydanticObjectId(report_id))
+async def download_report(
+    report_id: str,
+    current_user: User = Depends(require_report_access),
+):
+    if not PydanticObjectId.is_valid(report_id):
+        raise HTTPException(status_code=404, detail="Hisobot topilmadi")
 
-    if not rec or not os.path.exists(rec.file_path):
-        raise HTTPException(status_code=404, detail="Hisobot fayli topilmadi")
+    report = await Report.get(PydanticObjectId(report_id))
+    if not report or report.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Hisobot topilmadi")
 
-    media_type = "application/pdf" if rec.format == "pdf" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    return FileResponse(path=rec.file_path, filename=os.path.basename(rec.file_path), media_type=media_type)
+    filename = report.filename or (
+        Path(report.file_path).name if report.file_path else "report"
+    )
+    content_type = report.content_type or (
+        PDF_CONTENT_TYPE if report.format == "pdf" else EXCEL_CONTENT_TYPE
+    )
+    if report.file_data is not None:
+        return Response(
+            content=report.file_data,
+            media_type=content_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    if report.file_path and os.path.isfile(report.file_path):
+        return FileResponse(
+            path=report.file_path,
+            filename=filename,
+            media_type=content_type,
+        )
+    raise HTTPException(status_code=404, detail="Hisobot fayli topilmadi")

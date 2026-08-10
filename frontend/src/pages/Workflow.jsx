@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { workflowApi } from '../api/client'
 import { formatAmount, formatDate, formatDateShort } from '../utils/format'
 import { StatusBadge, RiskBadge, TypeBadge } from '../components/Badges'
+import { getApiError } from '../utils/apiError'
 
 export default function Workflow({ currentUser }) {
   const { t } = useTranslation()
@@ -14,9 +15,11 @@ export default function Workflow({ currentUser }) {
   const [comment, setComment] = useState('')
   const [actionLoading, setActionLoading] = useState(null)
   const [errorMsg, setErrorMsg] = useState(null)
+  const [loadError, setLoadError] = useState(null)
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const [queueRes, statsRes] = await Promise.all([
         workflowApi.getQueue(activeTab),
@@ -24,22 +27,19 @@ export default function Workflow({ currentUser }) {
       ])
       setItems(queueRes.data)
       setStats(statsRes.data)
-      if (queueRes.data.length > 0) {
-        const found = queueRes.data.find(t => t.id === selectedTx?.id)
-        setSelectedTx(found || queueRes.data[0])
-      } else {
-        setSelectedTx(null)
-      }
+      setSelectedTx((current) => (
+        queueRes.data.find(tx => tx.id === current?.id) || queueRes.data[0] || null
+      ))
     } catch (err) {
-      console.error(err)
+      setLoadError(getApiError(err, "Workflow ma'lumotlarini yuklab bo'lmadi"))
     } finally {
       setLoading(false)
     }
-  }
+  }, [activeTab])
 
   useEffect(() => {
     loadData()
-  }, [activeTab])
+  }, [loadData])
 
   const isOverdue = (createdDateStr) => {
     if (!createdDateStr) return false
@@ -57,7 +57,7 @@ export default function Workflow({ currentUser }) {
       setComment('')
       loadData()
     } catch (err) {
-      setErrorMsg(err.response?.data?.detail || "Xato yuz berdi")
+      setErrorMsg(getApiError(err))
     } finally {
       setActionLoading(null)
     }
@@ -71,7 +71,7 @@ export default function Workflow({ currentUser }) {
       setComment('')
       loadData()
     } catch (err) {
-      setErrorMsg(err.response?.data?.detail || "Xato yuz berdi")
+      setErrorMsg(getApiError(err))
     } finally {
       setActionLoading(null)
     }
@@ -89,13 +89,13 @@ export default function Workflow({ currentUser }) {
       setComment('')
       loadData()
     } catch (err) {
-      setErrorMsg(err.response?.data?.detail || "Xato yuz berdi")
+      setErrorMsg(getApiError(err))
     } finally {
       setActionLoading(null)
     }
   }
 
-  const isAuditor = currentUser?.role === 'auditor'
+  const isAdmin = currentUser?.role === 'admin'
 
   return (
     <div className="animate-fade-in" style={{ padding: 36, maxWidth: 1300 }}>
@@ -108,6 +108,12 @@ export default function Workflow({ currentUser }) {
           {t('workflow.subtitle')}
         </p>
       </div>
+
+      {loadError && (
+        <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, color: '#FC8181', background: 'rgba(245,101,101,0.12)', border: '1px solid rgba(245,101,101,0.25)', fontSize: 13 }}>
+          {loadError} <button type="button" onClick={loadData} style={{ marginLeft: 8, color: 'inherit', textDecoration: 'underline', background: 'none', border: 0, cursor: 'pointer' }}>Qayta urinish</button>
+        </div>
+      )}
 
       {/* Navigation Tabs with Counts */}
       <div style={{
@@ -194,7 +200,7 @@ export default function Workflow({ currentUser }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                       <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)' }}>
-                        #{tx.id.toString().padStart(4, '0')}
+                        {tx.transaction_id}
                       </span>
                       <TypeBadge type={tx.type} />
                     </div>
@@ -238,7 +244,7 @@ export default function Workflow({ currentUser }) {
                 <div>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
                     <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>
-                      {selectedTx.type} #{selectedTx.id.toString().padStart(4, '0')}
+                      {selectedTx.type} {selectedTx.transaction_id}
                     </h2>
                     <TypeBadge type={selectedTx.type} />
                     <StatusBadge status={selectedTx.status} />
@@ -317,7 +323,7 @@ export default function Workflow({ currentUser }) {
               </div>
 
               {/* Workflow Actions Box */}
-              {!isAuditor && selectedTx.status !== 'approved' && selectedTx.status !== 'rejected' && (
+              {(selectedTx.status === 'reviewing' || (isAdmin && selectedTx.status === 'pending')) && (
                 <div style={{
                   padding: 20, borderRadius: 12, background: 'rgba(27,67,50,0.4)', border: '1px solid var(--border-medium)'
                 }}>
@@ -341,7 +347,7 @@ export default function Workflow({ currentUser }) {
                   )}
 
                   <div style={{ display: 'flex', gap: 12 }}>
-                    {selectedTx.status === 'pending' && (
+                    {isAdmin && selectedTx.status === 'pending' && (
                       <button
                         className="btn btn-ghost"
                         disabled={!!actionLoading}
@@ -352,30 +358,32 @@ export default function Workflow({ currentUser }) {
                       </button>
                     )}
 
-                    <button
-                      className="btn btn-green"
-                      disabled={!!actionLoading}
-                      onClick={() => handleApprove(selectedTx.id)}
-                      style={{ flex: 1, padding: '10px 14px' }}
-                    >
-                      {actionLoading === 'approve' ? 'Tasdiqlanmoqda...' : '✅ Tasdiqlash'}
-                    </button>
+                    {selectedTx.status === 'reviewing' && <>
+                      <button
+                        className="btn btn-green"
+                        disabled={!!actionLoading}
+                        onClick={() => handleApprove(selectedTx.id)}
+                        style={{ flex: 1, padding: '10px 14px' }}
+                      >
+                        {actionLoading === 'approve' ? 'Tasdiqlanmoqda...' : '✅ Tasdiqlash'}
+                      </button>
 
-                    <button
-                      className="btn btn-danger"
-                      disabled={!!actionLoading}
-                      onClick={() => handleReject(selectedTx.id)}
-                      style={{ flex: 1, padding: '10px 14px' }}
-                    >
-                      {actionLoading === 'reject' ? 'Rad etilmoqda...' : '❌ Rad etish'}
-                    </button>
+                      <button
+                        className="btn btn-danger"
+                        disabled={!!actionLoading}
+                        onClick={() => handleReject(selectedTx.id)}
+                        style={{ flex: 1, padding: '10px 14px' }}
+                      >
+                        {actionLoading === 'reject' ? 'Rad etilmoqda...' : '❌ Rad etish'}
+                      </button>
+                    </>}
                   </div>
                 </div>
               )}
 
-              {isAuditor && (
+              {selectedTx.status === 'pending' && !isAdmin && (
                 <div style={{ padding: 14, background: 'rgba(144,205,244,0.1)', borderRadius: 8, color: '#90CDF4', fontSize: 13, textAlign: 'center' }}>
-                  ℹ️ Siz Auditor rolida ko'rib chiqmoqdasiz (Faqat o'qish rejimida).
+                  ℹ️ Bitimni review bosqichiga faqat administrator yuboradi.
                 </div>
               )}
             </div>

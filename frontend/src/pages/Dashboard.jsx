@@ -22,7 +22,7 @@ function RecentRow({ tx }) {
     <tr style={{ borderBottom: '1px solid var(--border-subtle)', transition: 'background 0.15s' }}
       onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-hover)'}
       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-      <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)', fontFamily: 'monospace' }}>#{tx.id.toString().padStart(4,'0')}</td>
+      <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{tx.transaction_id}</td>
       <td style={{ padding: '12px 16px' }}><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{tx.type}</span></td>
       <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{formatAmount(tx.amount, tx.currency)}</td>
       <td style={{ padding: '12px 16px' }}><StatusBadge status={tx.status} /></td>
@@ -73,16 +73,14 @@ export default function Dashboard() {
     transactionsApi.stats()
       .then((res) => setStats(res.data))
       .catch((err) => {
-        console.error('Dashboard stats error:', err)
-        setStatsError('Dashboard statistikasi yuklanmadi.')
+        setStatsError(err.response?.data?.detail || 'Dashboard statistikasi yuklanmadi.')
       })
       .finally(() => setStatsLoading(false))
 
     transactionsApi.list({ limit: 6 })
       .then((res) => setRecent(res.data))
       .catch((err) => {
-        console.error('Dashboard recent transactions error:', err)
-        setRecentError('Yaqinda qo‘shilgan bitimlar yuklanmadi.')
+        setRecentError(err.response?.data?.detail || 'Yaqinda qo‘shilgan bitimlar yuklanmadi.')
       })
       .finally(() => setRecentLoading(false))
   }
@@ -127,7 +125,13 @@ export default function Dashboard() {
             <StatCard label={t('dashboard.totalTx')} value={stats.total} icon="📊" color="var(--text-primary)" />
             <StatCard label={t('dashboard.approved')} value={stats.by_status.approved} sub={t('dashboard.approvedPct', { pct: approvedPct })} icon="✅" color="#68D391" />
             <StatCard label={t('dashboard.reviewing')} value={stats.by_status.reviewing} icon="⏳" color="#90CDF4" />
-            <StatCard label={t('dashboard.approvedVolume')} value={formatAmount(stats.approved_volume_uzs)} icon="💰" color="var(--gold-primary)" />
+            <StatCard
+              label={t('dashboard.approvedVolume')}
+              value={formatAmount(stats.approved_volume_uzs, 'UZS')}
+              sub={stats.approved_volume_by_currency?.USD ? formatAmount(stats.approved_volume_by_currency.USD, 'USD') : null}
+              icon="💰"
+              color="var(--gold-primary)"
+            />
           </>
         )}
       </div>

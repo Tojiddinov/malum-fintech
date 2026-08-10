@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { reportsApi } from '../api/client'
 import { formatDate } from '../utils/format'
+import { getApiError } from '../utils/apiError'
 
 export default function Reports() {
   const { t } = useTranslation()
@@ -17,14 +18,15 @@ export default function Reports() {
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(true)
   const [message, setMessage] = useState(null)
+  const [downloadingId, setDownloadingId] = useState(null)
 
   const loadHistory = async () => {
     setHistoryLoading(true)
     try {
       const { data } = await reportsApi.history()
       setHistory(data)
-    } catch (e) {
-      console.error(e)
+    } catch (err) {
+      setMessage({ type: 'error', text: getApiError(err, "Hisobotlar tarixini yuklab bo'lmadi") })
     } finally {
       setHistoryLoading(false)
     }
@@ -33,6 +35,25 @@ export default function Reports() {
   useEffect(() => {
     loadHistory()
   }, [])
+
+  const downloadReport = async (item) => {
+    setDownloadingId(item.id)
+    try {
+      const response = await reportsApi.download(item.id)
+      const objectUrl = URL.createObjectURL(response.data)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = item.filename || `report-${item.id}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch (err) {
+      setMessage({ type: 'error', text: getApiError(err, "Hisobotni yuklab bo'lmadi") })
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   const handleGenerate = async (e) => {
     e.preventDefault()
@@ -53,11 +74,10 @@ export default function Reports() {
       const { data } = await reportsApi.generate(reqPayload)
       setMessage({ type: 'success', text: `✅ Hisobot yaratildi: ${data.filename}` })
 
-      // Auto trigger browser download
-      window.open(reportsApi.downloadUrl(data.id), '_blank', 'noopener,noreferrer')
-      loadHistory()
+      await downloadReport({ id: data.id, filename: data.filename })
+      await loadHistory()
     } catch (err) {
-      setMessage({ type: 'error', text: err.response?.data?.detail || "Hisobot yaratishda xato" })
+      setMessage({ type: 'error', text: getApiError(err, "Hisobot yaratishda xato") })
     } finally {
       setLoading(false)
     }
@@ -168,7 +188,7 @@ export default function Reports() {
             {/* Min Amount */}
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
-                Minimal miqdor (UZS)
+                Minimal miqdor
               </label>
               <input
                 type="number"
@@ -304,15 +324,15 @@ export default function Reports() {
                       {formatDate(item.created_at)}
                     </td>
                     <td style={{ padding: '12px' }}>
-                      <a
-                        href={reportsApi.downloadUrl(item.id)}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => downloadReport(item)}
+                        disabled={downloadingId === item.id}
                         className="btn btn-ghost"
                         style={{ padding: '4px 10px', fontSize: 11, color: 'var(--gold-primary)' }}
                       >
-                        ⬇️ Yuklab olish
-                      </a>
+                        {downloadingId === item.id ? 'Yuklanmoqda...' : '⬇️ Yuklab olish'}
+                      </button>
                     </td>
                   </tr>
                 ))

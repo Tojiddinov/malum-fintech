@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { transactionsApi } from '../api/client'
 import { formatAmount, formatDate } from '../utils/format'
 import { StatusBadge, RiskBadge, TypeBadge } from '../components/Badges'
+import { getApiError } from '../utils/apiError'
 
 function AuditEntry({ log }) {
   const actionIcons = {
@@ -36,7 +37,7 @@ function AuditEntry({ log }) {
   )
 }
 
-function WorkflowAction({ tx, actor, onRefresh }) {
+function WorkflowAction({ tx, currentUser, onRefresh }) {
   const [comment, setComment] = useState('')
   const [loading, setLoading] = useState(null)
   const [error, setError] = useState(null)
@@ -45,19 +46,19 @@ function WorkflowAction({ tx, actor, onRefresh }) {
     setLoading(label)
     setError(null)
     try {
-      await apiCall({ actor, comment })
+      await apiCall({ comment })
       setComment('')
       onRefresh()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Xato yuz berdi')
+      setError(getApiError(err))
     } finally {
       setLoading(null)
     }
   }
 
-  const canSubmit = tx.status === 'pending'
-  const canApprove = tx.status === 'reviewing'
-  const canReject = tx.status === 'reviewing' || tx.status === 'pending'
+  const canSubmit = currentUser?.role === 'admin' && tx.status === 'pending'
+  const canApprove = ['admin', 'shariat_board'].includes(currentUser?.role) && tx.status === 'reviewing'
+  const canReject = ['admin', 'shariat_board'].includes(currentUser?.role) && tx.status === 'reviewing'
   const isTerminal = tx.status === 'approved' || tx.status === 'rejected'
 
   if (isTerminal) {
@@ -67,6 +68,14 @@ function WorkflowAction({ tx, actor, onRefresh }) {
         <div style={{ fontSize: 13, fontWeight: 600, color: tx.status === 'approved' ? '#68D391' : '#FC8181' }}>
           Bitim {tx.status === 'approved' ? 'tasdiqlangan' : 'rad etilgan'}
         </div>
+      </div>
+    )
+  }
+
+  if (!canSubmit && !canApprove && !canReject) {
+    return (
+      <div style={{ padding: 14, background: 'rgba(144,205,244,0.1)', borderRadius: 8, color: '#90CDF4', fontSize: 13, textAlign: 'center' }}>
+        ℹ️ Ushbu bosqichda siz uchun amal mavjud emas.
       </div>
     )
   }
@@ -109,14 +118,13 @@ function WorkflowAction({ tx, actor, onRefresh }) {
   )
 }
 
-export default function TransactionDetail() {
+export default function TransactionDetail({ currentUser }) {
   const { id } = useParams()
   const navigate = useNavigate()
   const [tx, setTx] = useState(null)
   const [loading, setLoading] = useState(true)
-  const actor = 'Shariat Kengashi Vakili'
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const { data } = await transactionsApi.get(id)
       setTx(data)
@@ -125,9 +133,9 @@ export default function TransactionDetail() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id, navigate])
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => { load() }, [load])
 
   if (loading) return (
     <div style={{ padding: 36 }}>
@@ -152,14 +160,14 @@ export default function TransactionDetail() {
           ← Bitim Reestri
         </button>
         <span>/</span>
-        <span>#{id.padStart(4,'0')}</span>
+        <span>{tx.transaction_id}</span>
       </div>
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            {tx.type} #{id.padStart(4,'0')}
+            {tx.type} {tx.transaction_id}
           </h1>
           <TypeBadge type={tx.type} />
           <StatusBadge status={tx.status} />
@@ -177,7 +185,7 @@ export default function TransactionDetail() {
             <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 18 }}>Bitim tafsiloti</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               {[
-                { label: 'Bitim ID', value: `#${id.padStart(4,'0')}` },
+                { label: 'Bitim ID', value: tx.transaction_id },
                 { label: 'Tur', value: tx.type },
                 { label: 'Miqdor', value: formatAmount(tx.amount, tx.currency) },
                 { label: 'Valyuta', value: tx.currency },
@@ -271,7 +279,7 @@ export default function TransactionDetail() {
               )}
             </div>
 
-            <WorkflowAction tx={tx} actor={actor} onRefresh={load} />
+            <WorkflowAction tx={tx} currentUser={currentUser} onRefresh={load} />
           </div>
         </div>
       </div>

@@ -8,7 +8,7 @@ from app.services.auth import hash_password
 from app.services.aml_kyc import run_aml_kyc_check
 
 
-async def seed_data():
+async def seed_data(tenant_id: str = "amanat"):
     """Seeds demo users and demo transactions."""
     seed_users = [
         {
@@ -16,14 +16,14 @@ async def seed_data():
             "email": "admin@amanat.uz",
             "password": "admin123",
             "role": "admin",
-            "bank_name": "Malum Markaziy Banki",
+            "bank_name": "MIZAN Markaziy Banki",
         },
         {
             "full_name": "Farrukh Muminov (Admin)",
-            "email": "admin@malum.uz",
+            "email": "admin@mizan.uz",
             "password": "admin123",
             "role": "admin",
-            "bank_name": "Malum Markaziy Banki",
+            "bank_name": "MIZAN Markaziy Banki",
         },
         {
             "full_name": "Dr. Hamidulla Nazarov (Kengash Raisi)",
@@ -34,7 +34,7 @@ async def seed_data():
         },
         {
             "full_name": "Dr. Hamidulla Nazarov (Kengash Raisi)",
-            "email": "kengash@malum.uz",
+            "email": "kengash@mizan.uz",
             "password": "kengash123",
             "role": "shariat_board",
             "bank_name": "O'zbekiston Islom Banki Shariat Kengashi",
@@ -48,7 +48,7 @@ async def seed_data():
         },
         {
             "full_name": "Azizbek Karimov (Auditor)",
-            "email": "auditor@malum.uz",
+            "email": "auditor@mizan.uz",
             "password": "auditor123",
             "role": "auditor",
             "bank_name": "O'zbekiston Milliy Auditi",
@@ -60,6 +60,7 @@ async def seed_data():
         if not existing:
             user = User(
                 full_name=u["full_name"],
+                tenant_id=tenant_id,
                 email=u["email"],
                 password_hash=hash_password(u["password"]),
                 role=u["role"],
@@ -67,16 +68,10 @@ async def seed_data():
                 is_active=True,
             )
             await user.insert()
-        else:
-            # Always ensure working password hash
-            existing.password_hash = hash_password(u["password"])
-            existing.is_active = True
-            await existing.save()
-            
-    print("✅ MongoDB Seed users created/updated.")
+    print("✅ Missing MongoDB demo users created; existing accounts preserved.")
 
     # 2. Seed Transactions & Audit Logs
-    if await Transaction.count() == 0:
+    if await Transaction.find(Transaction.tenant_id == tenant_id).count() == 0:
         demo_transactions = [
             {"type": "Murabaha",  "amount": 250_000_000, "currency": "UZS", "responsible_person": "Dilshod Yusupov",  "counterparty": "TashkentAgroLtd",    "description": "Qishloq xo'jaligi jihozlarini moliyalashtirish (Murabaha asosida)",    "status": "approved"},
             {"type": "Musharaka", "amount": 850_000_000, "currency": "UZS", "responsible_person": "Nodira Karimova",  "counterparty": "BuildersCo LLC",       "description": "Ko'p qavatli uy-joy qurilishiga sheriklik (Musharaka)",             "status": "reviewing"},
@@ -87,12 +82,15 @@ async def seed_data():
         ]
 
         for i, d in enumerate(demo_transactions, start=1):
-            risk_score, risk_details = run_aml_kyc_check(d["type"], d["amount"], d.get("counterparty"))
+            risk_score, risk_details = run_aml_kyc_check(
+                d["type"], d["amount"], d.get("counterparty"), d["currency"]
+            )
             days_ago = random.randint(1, 14)
             created = datetime.utcnow() - timedelta(days=days_ago)
 
             tx_code = f"#{str(i).zfill(4)}"
             tx = Transaction(
+                tenant_id=tenant_id,
                 transaction_id=tx_code,
                 type=d["type"],
                 amount=d["amount"],
@@ -110,6 +108,7 @@ async def seed_data():
 
             # Audit logs
             log1 = AuditLog(
+                tenant_id=tenant_id,
                 transaction_id=str(tx.id),
                 action="created",
                 actor=d["responsible_person"],
@@ -122,6 +121,7 @@ async def seed_data():
             if d["status"] in ("reviewing", "approved", "rejected"):
                 reviewed_at = created + timedelta(hours=random.randint(2, 12))
                 log2 = AuditLog(
+                    tenant_id=tenant_id,
                     transaction_id=str(tx.id),
                     action="submitted_for_review",
                     actor=d["responsible_person"],
@@ -134,6 +134,7 @@ async def seed_data():
             if d["status"] == "approved":
                 approved_at = created + timedelta(hours=random.randint(14, 48))
                 log3 = AuditLog(
+                    tenant_id=tenant_id,
                     transaction_id=str(tx.id),
                     action="approved",
                     actor="Dr. Hamidulla Nazarov (Kengash Raisi)",
@@ -146,6 +147,7 @@ async def seed_data():
             if d["status"] == "rejected":
                 rejected_at = created + timedelta(hours=random.randint(6, 24))
                 log4 = AuditLog(
+                    tenant_id=tenant_id,
                     transaction_id=str(tx.id),
                     action="rejected",
                     actor="Shariat Kengashi",

@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { transactionsApi } from '../api/client'
 import { formatAmount, formatDateShort } from '../utils/format'
 import { StatusBadge, RiskBadge, TypeBadge } from '../components/Badges'
 import NewTransactionModal from '../components/NewTransactionModal'
+import { getApiError } from '../utils/apiError'
 
 const STATUS_OPTIONS = ['', 'pending', 'reviewing', 'approved', 'rejected']
 const TYPE_OPTIONS = ['', 'Murabaha', 'Musharaka']
 
-export default function Transactions() {
+export default function Transactions({ currentUser }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [transactions, setTransactions] = useState([])
@@ -18,27 +19,32 @@ export default function Transactions() {
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [error, setError] = useState(null)
+  const canWrite = currentUser?.role === 'admin'
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       const params = {}
       if (statusFilter) params.status = statusFilter
       if (typeFilter) params.type = typeFilter
       const { data } = await transactionsApi.list(params)
       setTransactions(data)
+    } catch (err) {
+      setError(getApiError(err, "Bitimlarni yuklab bo'lmadi"))
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter, typeFilter])
 
-  useEffect(() => { load() }, [statusFilter, typeFilter])
+  useEffect(() => { load() }, [load])
 
   const filtered = transactions.filter(tx =>
     !search ||
     tx.responsible_person?.toLowerCase().includes(search.toLowerCase()) ||
     tx.counterparty?.toLowerCase().includes(search.toLowerCase()) ||
-    tx.id.toString().includes(search)
+    tx.transaction_id?.toLowerCase().includes(search.toLowerCase())
   )
 
   const handleCreated = (newTx) => {
@@ -61,11 +67,17 @@ export default function Transactions() {
           <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>{t('transactions.title')}</h1>
           <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>{t('transactions.subtitle')}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)} style={{ padding: '11px 22px', fontSize: 14 }}>
+        {canWrite && <button className="btn btn-primary" onClick={() => setShowModal(true)} style={{ padding: '11px 22px', fontSize: 14 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           {t('transactions.newTx')}
-        </button>
+        </button>}
       </div>
+
+      {error && (
+        <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, color: '#FC8181', background: 'rgba(245,101,101,0.12)', border: '1px solid rgba(245,101,101,0.25)', fontSize: 13 }}>
+          {error} <button type="button" onClick={load} style={{ marginLeft: 8, color: 'inherit', textDecoration: 'underline', background: 'none', border: 0, cursor: 'pointer' }}>Qayta urinish</button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card" style={{ padding: '14px 18px', marginBottom: 20, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -114,9 +126,9 @@ export default function Transactions() {
                 <td colSpan={9} style={{ padding: 48, textAlign: 'center' }}>
                   <div style={{ fontSize: 32, marginBottom: 10 }}>📋</div>
                   <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>{t('transactions.noTx')}</div>
-                  <button className="btn btn-primary" onClick={() => setShowModal(true)} style={{ marginTop: 16, fontSize: 13 }}>
+                  {canWrite && <button className="btn btn-primary" onClick={() => setShowModal(true)} style={{ marginTop: 16, fontSize: 13 }}>
                     {t('transactions.newTx')}
-                  </button>
+                  </button>}
                 </td>
               </tr>
             ) : filtered.map((tx) => (
@@ -125,7 +137,7 @@ export default function Transactions() {
                 style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'background 0.15s' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-hover)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <td style={{ padding: '14px 16px', fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>#{tx.id.toString().padStart(4,'0')}</td>
+                <td style={{ padding: '14px 16px', fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{tx.transaction_id}</td>
                 <td style={{ padding: '14px 16px' }}><TypeBadge type={tx.type} /></td>
                 <td style={{ padding: '14px 16px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{formatAmount(tx.amount, tx.currency)}</td>
                 <td style={{ padding: '14px 16px', fontSize: 13, color: 'var(--text-secondary)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.counterparty || '—'}</td>
@@ -144,7 +156,7 @@ export default function Transactions() {
         </table>
       </div>
 
-      {showModal && <NewTransactionModal onClose={() => setShowModal(false)} onCreated={handleCreated} />}
+      {canWrite && showModal && <NewTransactionModal onClose={() => setShowModal(false)} onCreated={handleCreated} />}
     </div>
   )
 }

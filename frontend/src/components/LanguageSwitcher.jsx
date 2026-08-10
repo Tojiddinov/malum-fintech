@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next'
-import { useState } from 'react'
 
 const LANGUAGES = [
   { code: 'uz', label: "O'zbekcha", flag: '🇺🇿', short: 'UZ' },

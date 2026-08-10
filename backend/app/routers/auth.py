@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
@@ -21,6 +21,7 @@ class TokenOut(BaseModel):
 
 class UserOut(BaseModel):
     id: str
+    tenant_id: str
     full_name: str
     email: str
     role: str
@@ -30,8 +31,6 @@ class UserOut(BaseModel):
     created_at: datetime
     last_login: Optional[datetime]
 
-
-from app.services.seed_service import seed_data
 
 import traceback
 import app.state as app_state
@@ -45,16 +44,9 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
             detail="Ma'lumotlar bazasi ulanmagan. Render environment variables va MongoDB Atlas IP whitelist tekshiring."
         )
     try:
-        user = await User.find_one({"email": form_data.username})
+        email = form_data.username.strip().lower()
+        user = await User.find_one({"email": email})
         
-        # Auto-seed fallback if DB is uninitialized or missing demo user
-        if not user:
-            try:
-                await seed_data()
-                user = await User.find_one({"email": form_data.username})
-            except Exception as seed_err:
-                print(f"Seed error on login fallback: {seed_err}")
-
         if not user or not verify_password(form_data.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -67,12 +59,15 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         user.last_login = datetime.utcnow()
         await user.save()
 
-        token = create_access_token({"sub": user.email, "role": user.role})
+        token = create_access_token(
+            {"sub": user.email, "role": user.role, "tenant_id": user.tenant_id}
+        )
         return {
             "access_token": token,
             "token_type": "bearer",
             "user": {
                 "id": str(user.id),
+                "tenant_id": user.tenant_id,
                 "full_name": user.full_name,
                 "email": user.email,
                 "role": user.role,
@@ -87,7 +82,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         print(f"LOGIN ERROR MSG: {err}")
         print("LOGIN ERROR TRACEBACK:")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Login Error [{type(err).__name__}]: {str(err)}")
+        raise HTTPException(status_code=500, detail="Login xizmati vaqtincha ishlamayapti")
 
 
 @router.get("/me", response_model=UserOut)
@@ -95,6 +90,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
     """Joriy foydalanuvchi ma'lumoti."""
     return {
         "id": str(current_user.id),
+        "tenant_id": current_user.tenant_id,
         "full_name": current_user.full_name,
         "email": current_user.email,
         "role": current_user.role,

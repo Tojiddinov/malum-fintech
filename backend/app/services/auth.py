@@ -2,6 +2,7 @@
 JWT Authentication Service for MongoDB / Beanie
 """
 import os
+import warnings
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
@@ -14,7 +15,18 @@ from app.models.models import User
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "amanat-super-secret-key-2024-change-in-production")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+IS_PRODUCTION = ENVIRONMENT == "production" or os.getenv("RENDER", "").lower() == "true"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    if IS_PRODUCTION:
+        raise RuntimeError("JWT_SECRET_KEY must be configured in production")
+    SECRET_KEY = "development-only-secret-change-me"
+    warnings.warn(
+        "JWT_SECRET_KEY is not set; using a development-only secret",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # 8 hours
 
@@ -48,7 +60,9 @@ def hash_password(plain: str) -> str:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -84,4 +98,16 @@ async def require_admin(current_user: User = Depends(get_current_user)) -> User:
 async def require_shariat_or_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role not in ("admin", "shariat_board"):
         raise HTTPException(status_code=403, detail="Faqat Shariat kengashi yoki admin uchun")
+    return current_user
+
+
+async def require_writer(current_user: User = Depends(get_current_user)) -> User:
+    if "write" not in ROLE_PERMISSIONS.get(current_user.role, []):
+        raise HTTPException(status_code=403, detail="Ushbu amal uchun yozish huquqi kerak")
+    return current_user
+
+
+async def require_report_access(current_user: User = Depends(get_current_user)) -> User:
+    if "reports" not in ROLE_PERMISSIONS.get(current_user.role, []):
+        raise HTTPException(status_code=403, detail="Hisobotlar uchun ruxsat mavjud emas")
     return current_user

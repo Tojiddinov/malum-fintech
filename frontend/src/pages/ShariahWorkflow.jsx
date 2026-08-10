@@ -43,7 +43,7 @@ export default function ShariahWorkflow() {
     }
 
     return (
-      <div className="card animate-fade-in" style={{ padding: 18, marginBottom: 14 }}
+      <div className="card animate-fade-in"
         onClick={(e) => { if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'TEXTAREA') navigate(`/transactions/${tx.id}`) }}
         style={{ padding: 18, marginBottom: 14, cursor: 'pointer', transition: 'border-color 0.2s' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>

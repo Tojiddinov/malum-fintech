@@ -13,8 +13,6 @@ const API_BASE_URL = (
     : CONFIGURED_API_URL || '/api'
 ).replace(/\/+$/, '')
 
-const apiUrl = (path) => `${API_BASE_URL}/${path.replace(/^\/+/, '')}`
-
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
@@ -57,9 +55,9 @@ export const authApi = {
 }
 
 export const transactionsApi = {
-  list: (params = {}) => api.get('/transactions/', { params }),
+  list: (params = {}) => api.get('/transactions', { params }),
   get: (id) => api.get(`/transactions/${id}`),
-  create: (data) => api.post('/transactions/', data),
+  create: (data) => api.post('/transactions', data),
   update: (id, data) => api.patch(`/transactions/${id}`, data),
   submitReview: (id, payload) => api.post(`/transactions/${id}/submit-review`, payload),
   approve: (id, payload) => api.post(`/transactions/${id}/approve`, payload),
@@ -80,15 +78,19 @@ export const workflowApi = {
 export const reportsApi = {
   generate: (data) => api.post('/reports/generate', data),
   history: () => api.get('/reports/history'),
-  downloadUrl: (id) => apiUrl(`/reports/download/${id}`),
+  download: (id) => api.get(`/reports/download/${id}`, { responseType: 'blob' }),
 }
 
 export const usersApi = {
-  list: () => api.get('/users/'),
-  create: (data) => api.post('/users/', data),
+  list: () => api.get('/users'),
+  create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
   deactivate: (id) => api.delete(`/users/${id}/deactivate`),
   activity: (id) => api.get(`/users/${id}/activity`),
+}
+
+export const demoRequestsApi = {
+  create: (data) => api.post('/demo-requests', data),
 }
 
 export default api

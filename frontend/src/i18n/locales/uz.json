@@ -1,6 +1,6 @@
 {
   "brand": {
-    "name": "Malum",
+    "name": "MIZAN",
     "tagline": "Islom Banki",
     "description": "O'zbekiston Islom banklari fintech platformasi",
     "slogan": "Islom Moliyasi Platformasi"
@@ -57,7 +57,7 @@
   "auth": {
     "loginTitle": "Tizimga kirish",
     "email": "Elektron pochta (Email)",
-    "emailPlaceholder": "masalan: admin@malum.uz",
+    "emailPlaceholder": "masalan: admin@mizan.uz",
     "password": "Parol",
     "passwordPlaceholder": "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
     "loginButton": "Tizimga kirish \u2192",
@@ -201,7 +201,7 @@
     "contactBank": "Bank nomi",
     "contactMessage": "Xabar (ixtiyoriy)",
     "contactSend": "Xabar yuborish \u2192",
-    "footerRights": "\u00a9 {{year}} Malum. Barcha huquqlar himoyalangan.",
+    "footerRights": "\u00a9 {{year}} MIZAN. Barcha huquqlar himoyalangan.",
     "footerTagline": "O'zbekiston Islom banklari uchun"
   },
   "status": {

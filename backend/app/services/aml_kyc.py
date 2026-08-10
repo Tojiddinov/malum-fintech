@@ -6,13 +6,14 @@ In production, this would connect to actual AML/KYC API providers
 (e.g., Refinitiv World-Check, ComplyAdvantage, local NBU integrations).
 """
 
-import random
 from typing import Tuple
 
 
 RISK_RULES = {
-    "high_amount_threshold": 500_000_000,   # 500M UZS
-    "medium_amount_threshold": 100_000_000,  # 100M UZS
+    "amount_thresholds": {
+        "UZS": {"high": 500_000_000, "medium": 100_000_000},
+        "USD": {"high": 50_000, "medium": 10_000},
+    },
     "high_risk_counterparties": [
         "shell corp", "offshore", "anon",
     ],
@@ -21,7 +22,12 @@ RISK_RULES = {
 }
 
 
-def _compute_risk(transaction_type: str, amount: float, counterparty: str | None) -> Tuple[str, str]:
+def _compute_risk(
+    transaction_type: str,
+    amount: float,
+    counterparty: str | None,
+    currency: str,
+) -> Tuple[str, str]:
     """
     Returns (risk_level, details) tuple.
     Risk levels: 'low' | 'medium' | 'high'
@@ -30,14 +36,25 @@ def _compute_risk(transaction_type: str, amount: float, counterparty: str | None
     details_parts = []
 
     # Amount-based risk
-    if amount >= RISK_RULES["high_amount_threshold"]:
+    normalized_currency = currency.upper()
+    thresholds = RISK_RULES["amount_thresholds"].get(
+        normalized_currency,
+        RISK_RULES["amount_thresholds"]["UZS"],
+    )
+    if amount >= thresholds["high"]:
         score += 0.5
-        details_parts.append(f"Yuqori miqdor: {amount:,.0f} UZS (> 500M)")
-    elif amount >= RISK_RULES["medium_amount_threshold"]:
+        details_parts.append(
+            f"Yuqori miqdor: {amount:,.0f} {normalized_currency} "
+            f"(>= {thresholds['high']:,.0f})"
+        )
+    elif amount >= thresholds["medium"]:
         score += 0.25
-        details_parts.append(f"O'rta miqdor: {amount:,.0f} UZS (> 100M)")
+        details_parts.append(
+            f"O'rta miqdor: {amount:,.0f} {normalized_currency} "
+            f"(>= {thresholds['medium']:,.0f})"
+        )
     else:
-        details_parts.append(f"Oddiy miqdor: {amount:,.0f} UZS")
+        details_parts.append(f"Oddiy miqdor: {amount:,.0f} {normalized_currency}")
 
     # Transaction type risk
     base = RISK_RULES.get(f"{transaction_type.lower()}_risk_base", 0.2)
@@ -58,8 +75,6 @@ def _compute_risk(transaction_type: str, amount: float, counterparty: str | None
         score += 0.05
         details_parts.append("Kontragent ko'rsatilmagan (+5% risk)")
 
-    # Small random noise for simulation realism
-    score += random.uniform(-0.02, 0.02)
     score = max(0.0, min(1.0, score))
 
     if score >= 0.6:
@@ -73,9 +88,14 @@ def _compute_risk(transaction_type: str, amount: float, counterparty: str | None
     return level, details
 
 
-def run_aml_kyc_check(transaction_type: str, amount: float, counterparty: str | None = None) -> Tuple[str, str]:
+def run_aml_kyc_check(
+    transaction_type: str,
+    amount: float,
+    counterparty: str | None = None,
+    currency: str = "UZS",
+) -> Tuple[str, str]:
     """
     Public API for AML/KYC mock check.
     Returns (risk_score: str, risk_details: str)
     """
-    return _compute_risk(transaction_type, amount, counterparty)
+    return _compute_risk(transaction_type, amount, counterparty, currency)

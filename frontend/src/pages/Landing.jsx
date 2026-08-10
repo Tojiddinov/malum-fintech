@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import { demoRequestsApi } from '../api/client'
+import { getApiError } from '../utils/apiError'
 
 export default function Landing() {
   const { t } = useTranslation()
@@ -11,6 +13,8 @@ export default function Landing() {
   // Form state
   const [form, setForm] = useState({ name: '', bank: '', email: '', phone: '', message: '' })
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -20,10 +24,26 @@ export default function Landing() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    console.log("Malum Demo Request:", form)
-    setSubmitted(true)
+    setSubmitted(false)
+    setSubmitError(null)
+    setSubmitting(true)
+    try {
+      await demoRequestsApi.create({
+        name: form.name,
+        bank_name: form.bank,
+        email: form.email,
+        phone: form.phone || null,
+        message: form.message || null,
+      })
+      setSubmitted(true)
+      setForm({ name: '', bank: '', email: '', phone: '', message: '' })
+    } catch (err) {
+      setSubmitError(getApiError(err, "Murojaatni yuborib bo'lmadi. Qayta urinib ko'ring."))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const scrollToSection = (id) => {
@@ -52,7 +72,7 @@ export default function Landing() {
               M
             </div>
             <div>
-              <span className="text-xl font-extrabold text-white tracking-tight block leading-tight">Malum</span>
+              <span className="text-xl font-extrabold text-white tracking-tight block leading-tight">MIZAN</span>
               <span className="text-[10px] text-[#C9A227] font-bold tracking-widest uppercase block">
                 {t('brand.slogan')}
               </span>
@@ -197,7 +217,7 @@ export default function Landing() {
                 <div className="flex items-center justify-between border-b border-white/10 pb-3">
                   <div className="flex items-center gap-2.5">
                     <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="font-bold text-xs text-amber-200">Malum Live Dashboard</span>
+                    <span className="font-bold text-xs text-amber-200">MIZAN Live Dashboard</span>
                   </div>
                   <span className="text-[10px] px-2 py-0.5 bg-[#C9A227]/20 text-[#C9A227] rounded border border-[#C9A227]/40 font-mono font-bold">
                     ONLINE
@@ -391,7 +411,7 @@ export default function Landing() {
           <div className="text-center max-w-3xl mx-auto mb-14 space-y-3">
             <h2 className="text-xs font-extrabold text-[#C9A227] uppercase tracking-widest">Taqqoslash</h2>
             <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#1B4332]">
-              Eski Yondashuv vs Malum Platformasi
+              Eski Yondashuv vs MIZAN Platformasi
             </p>
           </div>
 
@@ -424,7 +444,7 @@ export default function Landing() {
             <div className="bg-[#E6F4EA] border border-emerald-200 rounded-2xl p-7 space-y-5">
               <div className="flex items-center gap-3 border-b border-emerald-200 pb-3">
                 <span className="text-xl">✅</span>
-                <h3 className="text-lg font-bold text-[#1B4332]">Malum Yechimi</h3>
+                <h3 className="text-lg font-bold text-[#1B4332]">MIZAN Yechimi</h3>
               </div>
 
               <div className="space-y-3 text-xs sm:text-sm text-[#0F2D21] font-medium">
@@ -541,11 +561,18 @@ export default function Landing() {
               </div>
             )}
 
+            {submitError && (
+              <div className="p-3.5 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 text-xs text-center font-bold">
+                {typeof submitError === 'string' ? submitError : "Ma'lumotlarni tekshirib qayta urinib ko'ring."}
+              </div>
+            )}
+
             <button
               type="submit"
+              disabled={submitting}
               className="w-full py-3.5 rounded-xl bg-[#C9A227] hover:bg-[#E9C46A] text-[#0F2D21] font-extrabold text-sm shadow-lg transition-all cursor-pointer"
             >
-              Yuborish →
+              {submitting ? 'Yuborilmoqda...' : 'Yuborish →'}
             </button>
 
           </form>
@@ -557,7 +584,7 @@ export default function Landing() {
       <footer className="bg-[#0F2D21] border-t border-[#C9A227]/20 py-6 text-xs text-slate-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div>
-            <span className="font-bold text-white">Malum</span>{' '}
+            <span className="font-bold text-white">MIZAN</span>{' '}
             &copy; {new Date().getFullYear()} — {t('landing.footerTagline')}
           </div>
 

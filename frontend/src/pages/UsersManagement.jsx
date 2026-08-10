@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { usersApi } from '../api/client'
 import { formatDate } from '../utils/format'
+import { getApiError } from '../utils/apiError'
 
 export default function UsersManagement({ currentUser }) {
   const { t } = useTranslation()
@@ -18,14 +19,17 @@ export default function UsersManagement({ currentUser }) {
   const [bankName, setBankName] = useState("O'zbekiston Islom Banki")
   const [formError, setFormError] = useState(null)
   const [submitLoading, setSubmitLoading] = useState(false)
+  const [loadError, setLoadError] = useState(null)
+  const [actionError, setActionError] = useState(null)
 
   const loadUsers = async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const { data } = await usersApi.list()
       setUsers(data)
-    } catch (e) {
-      console.error(e)
+    } catch (err) {
+      setLoadError(getApiError(err, "Foydalanuvchilarni yuklab bo'lmadi"))
     } finally {
       setLoading(false)
     }
@@ -84,7 +88,7 @@ export default function UsersManagement({ currentUser }) {
       setShowModal(false)
       loadUsers()
     } catch (err) {
-      setFormError(err.response?.data?.detail || "Saqlashda xato yuz berdi")
+      setFormError(getApiError(err, "Saqlashda xato yuz berdi"))
     } finally {
       setSubmitLoading(false)
     }
@@ -93,10 +97,11 @@ export default function UsersManagement({ currentUser }) {
   const handleDeactivate = async (userId) => {
     if (!window.confirm("Haqiqatdan ham ushbu foydalanuvchini faolsizlashtirmoqchimisiz?")) return
     try {
+      setActionError(null)
       await usersApi.deactivate(userId)
       loadUsers()
     } catch (err) {
-      alert(err.response?.data?.detail || "Xato")
+      setActionError(getApiError(err, "Foydalanuvchini faolsizlantirib bo'lmadi"))
     }
   }
 
@@ -122,6 +127,13 @@ export default function UsersManagement({ currentUser }) {
           + {t('users.newUser')}
         </button>
       </div>
+
+      {(loadError || actionError) && (
+        <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, color: '#FC8181', background: 'rgba(245,101,101,0.12)', border: '1px solid rgba(245,101,101,0.25)', fontSize: 13 }}>
+          {loadError || actionError}
+          {loadError && <button type="button" onClick={loadUsers} style={{ marginLeft: 8, color: 'inherit', textDecoration: 'underline', background: 'none', border: 0, cursor: 'pointer' }}>Qayta urinish</button>}
+        </div>
+      )}
 
       {/* Users Table */}
       <div className="card" style={{ overflow: 'hidden' }}>
@@ -245,12 +257,12 @@ export default function UsersManagement({ currentUser }) {
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
                   {editingUser ? 'Parol (O\'zgartirish kiritmoqchi bo\'lsangiz yozing)' : 'Parol *'}
                 </label>
-                <input type="password" className="form-input" value={password} onChange={e => setPassword(e.target.value)} required={!editingUser} placeholder="••••••••" />
+                <input type="password" minLength={8} className="form-input" value={password} onChange={e => setPassword(e.target.value)} required={!editingUser} placeholder="••••••••" />
               </div>
 
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>Rol *</label>
-                <select className="form-input" value={role} onChange={e => setRole(e.target.value)}>
+                <select className="form-input" value={role} onChange={e => setRole(e.target.value)} disabled={editingUser?.id === currentUser.id}>
                   <option value="admin">Admin (Barcha huquqlar)</option>
                   <option value="shariat_board">Shariat Kengashi (Tasdiqlash & Rad etish)</option>
                   <option value="auditor">Auditor (Faqat o'qish)</option>

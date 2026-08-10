@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { transactionsApi } from '../api/client'
+import { getApiError } from '../utils/apiError'
 
 const INITIAL = {
   type: 'Murabaha',
@@ -30,7 +31,7 @@ export default function NewTransactionModal({ onClose, onCreated }) {
       const { data } = await transactionsApi.create(payload)
       onCreated(data)
     } catch (err) {
-      setError(err.response?.data?.detail || t('common.error'))
+      setError(getApiError(err, t('common.error')))
     } finally {
       setLoading(false)
     }
@@ -90,7 +91,7 @@ export default function NewTransactionModal({ onClose, onCreated }) {
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>{t('transactions.newModal.currency')}</label>
               <select className="form-input" name="currency" value={form.currency} onChange={handleChange}>
-                <option>UZS</option><option>USD</option><option>EUR</option>
+                <option>UZS</option><option>USD</option>
               </select>
             </div>
           </div>

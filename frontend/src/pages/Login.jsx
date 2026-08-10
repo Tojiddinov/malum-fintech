@@ -4,6 +4,19 @@ import { useTranslation } from 'react-i18next'
 import { authApi } from '../api/client'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 
+const getLoginError = (err, fallback) => {
+  if (!err.response) {
+    return "Server bilan aloqa o'rnatilmadi. Internet yoki backend holatini tekshiring."
+  }
+  if (err.response.status === 503) {
+    return "Server ma'lumotlar bazasiga ulana olmadi. Birozdan keyin qayta urinib ko'ring."
+  }
+  if (err.response.status >= 500) {
+    return "Serverda vaqtinchalik xato yuz berdi. Birozdan keyin qayta urinib ko'ring."
+  }
+  return err.response.data?.detail || fallback
+}
+
 export default function Login({ onLoginSuccess }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -23,7 +36,7 @@ export default function Login({ onLoginSuccess }) {
       onLoginSuccess(data.user)
       navigate('/dashboard', { replace: true })
     } catch (err) {
-      setError(err.response?.data?.detail || t('auth.loginError'))
+      setError(getLoginError(err, t('auth.loginError')))
     } finally {
       setLoading(false)
     }
@@ -41,7 +54,7 @@ export default function Login({ onLoginSuccess }) {
       onLoginSuccess(data.user)
       navigate('/dashboard', { replace: true })
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || t('auth.loginError'))
+      setError(getLoginError(err, t('auth.loginError')))
     } finally {
       setLoading(false)
     }
@@ -83,7 +96,7 @@ export default function Login({ onLoginSuccess }) {
             M
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            Malum
+            MIZAN
           </h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
             {t('brand.description')}
