@@ -1,11 +1,16 @@
 import axios from 'axios'
 
 const PRODUCTION_API_URL = 'https://malum-fintech.onrender.com/api'
+const CONFIGURED_API_URL = import.meta.env.VITE_API_URL?.trim()
 
 // Local development uses Vite's /api proxy. In production, call Render
-// directly unless VITE_API_URL explicitly provides another backend.
+// directly unless VITE_API_URL provides an absolute backend URL. This also
+// protects production from a stale Vercel VITE_API_URL=/api setting, because
+// the Vercel /api rewrite is not active for the current project deployment.
 const API_BASE_URL = (
-  import.meta.env.VITE_API_URL || (import.meta.env.PROD ? PRODUCTION_API_URL : '/api')
+  import.meta.env.PROD && (!CONFIGURED_API_URL || CONFIGURED_API_URL.startsWith('/'))
+    ? PRODUCTION_API_URL
+    : CONFIGURED_API_URL || '/api'
 ).replace(/\/+$/, '')
 
 const apiUrl = (path) => `${API_BASE_URL}/${path.replace(/^\/+/, '')}`
